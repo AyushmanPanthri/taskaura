@@ -1,36 +1,161 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# LifeXP — Gamify Your Productivity ⚡
 
-## Getting Started
+> Track habits, complete tasks, earn XP, and level up your real life. A gamified productivity system that turns daily routines into rewarding quests.
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## ✨ Features
+
+### 📊 Dashboard
+- **XP & Leveling** — Earn experience points for every completed task, habit, and focus session. Level up with a smooth progression curve (`level = √(totalXP / 100) + 1`).
+- **Streak Tracking** — Maintain daily streaks with a grace-day system to stay motivated without burnout.
+- **Stat Cards** — At-a-glance view of Total XP, Tasks Today, Focus Minutes, and Best Streak — each with animated ring visualisations.
+
+### ✅ Task Management
+- Create and manage tasks with four difficulty tiers: **Easy**, **Normal**, **Hard**, and **Epic**.
+- AI-suggested "Quest" tasks generated from behavioural pattern analysis.
+- XP rewards scale with difficulty via configurable multipliers.
+- Status lifecycle: `Pending → In Progress → Completed / Cancelled / Expired`.
+
+### 🧘 Habit Tracker
+- Daily, weekday, weekend, or custom-frequency habits.
+- Per-habit streak counters with personal-best tracking.
+- Each habit completion awards **+75 XP**.
+
+### 🎯 Focus Timer
+- Pomodoro-style focus sessions with preset durations (15 / 25 / 45 / 60 min).
+- Animated countdown ring with real-time progress.
+- Heartbeat-based session validation for integrity.
+- Earn **+100 XP** per completed session, plus streak bonuses up to **+50 XP**.
+
+### 🏆 Leaderboard
+- Weekly ranked leaderboard comparing XP across users.
+- Highlighted personal ranking with weekly stats (XP earned, tasks done, focus time).
+
+### 🧠 AI Insights Engine
+- **Rule-based AI** — 10+ deterministic rules (no LLM required) that analyse behavioral metrics and generate insights, recommendations, and auto-quests.
+- Bounded context assembly (capped metrics window + task cap) for efficiency.
+- Configurable daily limits for insights and quests.
+
+### 🏅 Achievements
+- Milestone-based badges (First Steps, Streak Master, Task Warrior, Focus Champion, and more).
+- Unlockable with visual lock/unlock states and category-coloured icons.
+
+---
+
+## 🏗️ Architecture
+
+```
+lifexp/
+├── app/                        # Next.js App Router
+│   ├── layout.tsx              # Root layout (Inter font, dark mode)
+│   ├── page.tsx                # Main SPA — Dashboard, Tasks, Focus, Leaderboard tabs
+│   └── globals.css             # Design system (glassmorphism, animations, tokens)
+├── lib/
+│   ├── logic/                  # Pure business logic (no side effects)
+│   │   ├── types.ts            # Core enums & interfaces
+│   │   ├── constants.ts        # XP tables, thresholds, AI limits
+│   │   ├── xp-engine.ts        # XP calculation & leveling
+│   │   ├── task-engine.ts      # Task lifecycle & XP rewards
+│   │   ├── focus-engine.ts     # Focus session validation
+│   │   ├── streak.ts           # Streak logic with grace days
+│   │   ├── difficulty.ts       # Difficulty multiplier system
+│   │   ├── achievement-engine.ts # Achievement condition evaluation
+│   │   ├── ai-rules.ts         # Deterministic AI rules (§14–§17)
+│   │   ├── baseline.ts         # Behavioral baseline & delta detection
+│   │   ├── aggregation.ts      # Daily metrics aggregation pipeline
+│   │   └── leaderboard.ts      # Weekly score ranking
+│   └── services/               # Stateful service layer
+│       ├── store.ts            # In-memory data store (hackathon MVP)
+│       ├── xp-service.ts       # XP transaction management
+│       ├── task-service.ts     # Task CRUD + completion
+│       ├── focus-service.ts    # Focus session orchestration
+│       ├── sync-service.ts     # Client ↔ server sync with dedup
+│       ├── leaderboard-service.ts # Leaderboard queries
+│       └── aggregation-service.ts # Metrics aggregation scheduler
+├── prisma/
+│   └── schema.prisma           # Canonical data model (PostgreSQL-ready)
+└── public/                     # Static assets
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Design Principles
+- **Logic / Service split** — All business rules in `lib/logic/` are pure functions with zero side effects. The `lib/services/` layer handles state and I/O.
+- **Idempotent XP** — Every XP transaction carries an idempotency key (`hash(sourceType + sourceId + rewardType)`) to prevent double-awarding.
+- **Offline-first sync** — `clientEventId`-based deduplication ensures reliable data sync.
+- **Deterministic AI** — No LLM dependency; all AI insights come from rule-based pattern matching on aggregated behavioural metrics.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 🛠️ Tech Stack
 
-## Learn More
+| Layer       | Technology                                 |
+| ----------- | ------------------------------------------ |
+| Framework   | [Next.js](https://nextjs.org) 16 (App Router) |
+| Language    | TypeScript 5                               |
+| UI          | React 19, Tailwind CSS 4                   |
+| Database    | Prisma ORM (PostgreSQL schema, in-memory MVP) |
+| Auth        | bcrypt (password hashing)                  |
+| Font        | [Inter](https://fonts.google.com/specimen/Inter) via `next/font` |
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 🚀 Getting Started
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Prerequisites
+- **Node.js** ≥ 18
+- **npm** (or yarn / pnpm / bun)
 
-## Deploy on Vercel
+### Installation
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+# Clone the repository
+git clone <repo-url>
+cd lifexp
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+# Install dependencies
+npm install
+
+# Start the development server
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) to see the app.
+
+### Database Setup (Optional)
+
+The app runs with an in-memory store by default. To use PostgreSQL:
+
+```bash
+# Set your database URL
+export DATABASE_URL="postgresql://user:password@localhost:5432/lifexp"
+
+# Uncomment the schema in prisma/schema.prisma, then:
+npx prisma db push
+npx prisma generate
+```
+
+---
+
+## 📜 Available Scripts
+
+| Command          | Description                    |
+| ---------------- | ------------------------------ |
+| `npm run dev`    | Start development server       |
+| `npm run build`  | Create production build         |
+| `npm run start`  | Start production server         |
+| `npm run lint`   | Run ESLint                      |
+
+---
+
+## 🎨 Design
+
+- **Dark mode** — Full dark theme with glassmorphism cards (`backdrop-blur`, subtle borders)
+- **Micro-animations** — Fade-in-up entries, pulse glows, streak flame animations
+- **XP toast notifications** — Floating toast with purple glow on every XP earn
+- **Responsive** — Sidebar navigation on desktop, compact icon bar on mobile
+
+---
+
+## 📄 License
+
+This project is private.

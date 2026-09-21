@@ -1,0 +1,274 @@
+// ============================================================
+// LifeXP — Prisma Schema (Reference / Documentation)
+// Maps to Logic System File v2 §19
+//
+// NOTE: Prisma v8 requires postgres/mongodb. This schema file
+// serves as the canonical data model reference. The actual
+// runtime uses an in-memory store (lib/services/store.ts)
+// that mirrors these tables for hackathon MVP.
+// ============================================================
+
+// To use with PostgreSQL, run:
+//   npx prisma orm init --target postgres --authoring psl
+// Then replace the generated schema with this content.
+
+/*
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  displayName  String
+  timezone     String   @default("UTC")
+  createdAt    DateTime @default(now())
+
+  settings        UserSettings?
+  usageSessions   UsageSession[]
+  goals           Goal[]
+  tasks           Task[]
+  habits          Habit[]
+  dailyMetrics    DailyMetrics[]
+  focusSessions   FocusSession[]
+  xpTransactions  XPTransaction[]
+  userAchievements UserAchievement[]
+  quests          Quest[]
+  aiInsights      AIInsight[]
+  weeklyScores    WeeklyScore[]
+  syncLogs        SyncLog[]
+  streakRecord    StreakRecord?
+}
+
+model UserSettings {
+  id                 String  @id @default(uuid())
+  userId             String  @unique
+  dailyGoalXp        Int     @default(500)
+  weekdayWeekendSplit Boolean @default(false)
+  retentionDays      Int     @default(90)
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model UsageSession {
+  id              String   @id @default(uuid())
+  clientEventId   String   @unique  // §3 v2: dedup key
+  userId          String
+  packageName     String
+  appName         String
+  startTime       DateTime
+  endTime         DateTime
+  durationSeconds Int
+  date            String   // YYYY-MM-DD, timezone-aware
+  category        String?
+  source          String
+  syncStatus      String   @default("PENDING")
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Goal {
+  id           String   @id @default(uuid())
+  userId       String
+  title        String
+  description  String?
+  category     String?
+  targetValue  Float
+  currentValue Float    @default(0)
+  status       String   @default("ACTIVE")
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Task {
+  id          String    @id @default(uuid())
+  userId      String
+  title       String
+  description String?
+  difficulty  String    @default("NORMAL")
+  status      String    @default("PENDING")
+  dueAt       DateTime?
+  completedAt DateTime?
+  source      String    @default("USER")
+  questId     String?
+  createdAt   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Habit {
+  id            String    @id @default(uuid())
+  userId        String
+  title         String
+  frequency     String    @default("DAILY")
+  streakCurrent Int       @default(0)
+  streakBest    Int       @default(0)
+  createdAt     DateTime  @default(now())
+
+  user      User       @relation(fields: [userId], references: [id])
+  habitLogs HabitLog[]
+}
+
+model HabitLog {
+  id        String  @id @default(uuid())
+  habitId   String
+  date      String  // YYYY-MM-DD
+  completed Boolean
+
+  habit Habit @relation(fields: [habitId], references: [id])
+
+  @@unique([habitId, date])
+}
+
+model DailyMetrics {
+  id                 String @id @default(uuid())
+  userId             String
+  date               String // YYYY-MM-DD
+  totalScreenTime    Int    @default(0)  // seconds
+  appOpens           Int    @default(0)
+  focusMinutes       Float  @default(0)
+  taskCompletionRate Float  @default(0)
+  // §6 — Behavioral metrics
+  distractionIndex   Float  @default(0)
+  focusScore         Float  @default(0)
+  consistencyScore   Float  @default(0)
+  goalAlignment      Float  @default(0)
+  taskReliability    Float  @default(0)
+  routineStability   Float  @default(0)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, date])  // §4: idempotent aggregation
+}
+
+model FocusSession {
+  id                 String    @id @default(uuid())
+  clientEventId      String    @unique  // dedup key
+  userId             String
+  status             String    @default("RUNNING")
+  startedAt          DateTime  @default(now())
+  completedAt        DateTime?
+  requiredMinutes    Int
+  actualMinutes      Float     @default(0)
+  heartbeatCount     Int       @default(0)
+  expectedHeartbeats Int       @default(0)
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model XPTransaction {
+  id                   String   @id @default(uuid())
+  userId               String
+  amount               Int
+  sourceType           String
+  sourceId             String
+  rewardType           String
+  idempotencyKey       String   @unique  // §9 v2: hash(sourceType+sourceId+rewardType)
+  baseXp               Int
+  difficultyMultiplier Float
+  streakBonus          Int      @default(0)
+  createdAt            DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([sourceType, sourceId, rewardType])  // §9 v2: DB-level uniqueness
+}
+
+model Achievement {
+  id          String @id @default(uuid())
+  name        String
+  description String
+  ruleVersion Int    @default(1)
+  condition   String // JSON: { type, threshold }
+
+  userAchievements UserAchievement[]
+}
+
+model UserAchievement {
+  id            String   @id @default(uuid())
+  userId        String
+  achievementId String
+  unlockedAt    DateTime @default(now())
+
+  user        User        @relation(fields: [userId], references: [id])
+  achievement Achievement @relation(fields: [achievementId], references: [id])
+
+  @@unique([userId, achievementId])  // §13 v2: one unlock per achievement
+}
+
+model Quest {
+  id             String   @id @default(uuid())
+  userId         String
+  title          String
+  description    String
+  difficulty     String   @default("NORMAL")
+  status         String   @default("ACTIVE")
+  triggeringRule  String   // AIRuleId
+  sourceMetrics  String   // JSON
+  createdAt      DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model AIInsight {
+  id                String   @id @default(uuid())
+  userId            String
+  type              String   // insight | recommendation | quest
+  content           String
+  sourceMetricsJson String   // JSON: triggering metrics
+  createdAt         DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model WeeklyScore {
+  id         String   @id @default(uuid())
+  userId     String
+  weekStart  String   // YYYY-MM-DD
+  weekEnd    String   // YYYY-MM-DD
+  totalXp    Int      @default(0)
+  rank       Int      @default(0)
+  snapshotAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, weekStart])
+}
+
+// §19 v2 — Task type config (tunable XP economy)
+model TaskTypeConfig {
+  id     String  @id @default(uuid())
+  type   String  @unique
+  baseXp Int
+  active Boolean @default(true)
+}
+
+// §19 v2 — Sync audit log
+model SyncLog {
+  id            String   @id @default(uuid())
+  userId        String
+  clientEventId String
+  receivedAt    DateTime @default(now())
+  status        String
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model StreakRecord {
+  id                 String  @id @default(uuid())
+  userId             String  @unique
+  currentStreak      Int     @default(0)
+  bestStreak         Int     @default(0)
+  lastEligibleDate   String? // YYYY-MM-DD
+  graceUsedThisWeek  Boolean @default(false)
+
+  user User @relation(fields: [userId], references: [id])
+}
+*/
