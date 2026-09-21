@@ -1,5 +1,5 @@
 // ============================================================
-// LifeXP — In-Memory Data Store
+// Task Aura — In-Memory Data Store
 // Hackathon MVP — replaces PostgreSQL + Redis
 // Mirrors the schema from prisma/schema.prisma
 // ============================================================
@@ -63,8 +63,9 @@ class InMemoryStore {
   syncLogs: SyncLogEntry[] = [];
   taskTypeConfigs = new Map<string, TaskTypeConfig>();
 
-  // Idempotency key index (mirrors DB unique constraint)
-  private xpIdempotencyKeys = new Set<string>();
+  // Idempotency index (mirrors DB UNIQUE(user_id, idempotency_key)).
+  // Keys like `daily:2026-09-21` repeat across users, so the index is per user.
+  private xpByKey = new Map<string, XPTransaction>();
   // Client event ID index (mirrors DB unique constraint)
   private clientEventIds = new Set<string>();
   // User achievement index (mirrors DB unique constraint)
@@ -155,15 +156,24 @@ class InMemoryStore {
 
   /**
    * Add XP transaction with idempotency check.
-   * Returns false if the idempotency key already exists (duplicate).
+   * Returns false if (userId, idempotencyKey) already exists (duplicate).
    */
   addXpTransaction(tx: XPTransaction): boolean {
-    if (this.xpIdempotencyKeys.has(tx.idempotencyKey)) {
+    const k = `${tx.userId}::${tx.idempotencyKey}`;
+    if (this.xpByKey.has(k)) {
       return false; // Duplicate — idempotent no-op
     }
-    this.xpIdempotencyKeys.add(tx.idempotencyKey);
+    this.xpByKey.set(k, tx);
     this.xpTransactions.set(tx.id, tx);
     return true;
+  }
+
+  /** O(1) lookup of a transaction by its idempotency key. */
+  getXpTransactionByKey(
+    userId: string,
+    idempotencyKey: string
+  ): XPTransaction | undefined {
+    return this.xpByKey.get(`${userId}::${idempotencyKey}`);
   }
 
   /**
@@ -228,7 +238,7 @@ class InMemoryStore {
     this.weeklyScores = [];
     this.streakRecords.clear();
     this.syncLogs = [];
-    this.xpIdempotencyKeys.clear();
+    this.xpByKey.clear();
     this.clientEventIds.clear();
     this.userAchievementKeys.clear();
   }

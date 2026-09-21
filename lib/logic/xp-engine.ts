@@ -13,7 +13,6 @@ import {
 import {
   BASE_XP,
   DIFFICULTY_MULTIPLIER,
-  LEVEL_XP_DIVISOR,
   MAX_STREAK_BONUS,
   STREAK_BONUS_PER_DAY,
 } from "./constants";
@@ -58,35 +57,24 @@ export function calculateFinalXp(
 /**
  * §11 — Calculate level from total XP.
  *
- * level = floor(sqrt(total_xp / 100)) + 1
- *
- * Always derived on read, never stored as mutable state (v2 efficiency note).
+ * v2: delegates to economy.ts table-based formula.
+ * Always derived on read, never stored as mutable state.
  */
-export function calculateLevel(totalXp: number): number {
-  if (totalXp < 0) return 1;
-  return Math.floor(Math.sqrt(totalXp / LEVEL_XP_DIVISOR)) + 1;
-}
+import { levelFor, levelProgress as levelProgressDetail, cumulativeXp } from "./economy";
+export const calculateLevel = (totalXp: number): number => levelFor(totalXp);
 
 /**
  * Calculate XP required to reach a given level.
- * Inverse of calculateLevel: xp = (level - 1)² × 100
+ * v2: delegates to economy.ts cumulative function.
  */
-export function xpRequiredForLevel(level: number): number {
-  if (level <= 1) return 0;
-  return Math.pow(level - 1, 2) * LEVEL_XP_DIVISOR;
-}
+export const xpRequiredForLevel = (level: number): number => cumulativeXp(level);
 
 /**
  * Calculate progress within current level (0.0 – 1.0).
+ * v2: delegates to economy.ts.
  */
-export function levelProgress(totalXp: number): number {
-  const currentLevel = calculateLevel(totalXp);
-  const currentLevelXp = xpRequiredForLevel(currentLevel);
-  const nextLevelXp = xpRequiredForLevel(currentLevel + 1);
-  const range = nextLevelXp - currentLevelXp;
-  if (range <= 0) return 0;
-  return (totalXp - currentLevelXp) / range;
-}
+export const levelProgress = (totalXp: number): number => levelProgressDetail(totalXp).fraction;
+
 
 /**
  * §9 v2 — Generate idempotency key for XP transactions.

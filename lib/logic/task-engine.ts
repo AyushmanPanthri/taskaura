@@ -18,6 +18,7 @@ import { TaskStatus } from "./types";
 const VALID_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
   [TaskStatus.PENDING]: [
     TaskStatus.IN_PROGRESS,
+    TaskStatus.COMPLETED,
     TaskStatus.CANCELLED,
     TaskStatus.EXPIRED,
   ],

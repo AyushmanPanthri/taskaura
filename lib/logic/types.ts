@@ -140,6 +140,7 @@ export interface Task {
   source: TaskSource;
   questId: string | null;
   createdAt: Date;
+  estimatedMinutes?: number | null;
 }
 
 /** §8 — Focus session */
@@ -154,6 +155,7 @@ export interface FocusSession {
   actualMinutes: number;
   heartbeatCount: number;
   expectedHeartbeats: number;
+  taskId?: string | null;
 }
 
 /** §9 — XP transaction (append-only ledger) */
@@ -169,6 +171,7 @@ export interface XPTransaction {
   difficultyMultiplier: number;
   streakBonus: number;
   createdAt: Date;
+  breakdown?: import("./economy").XpBreakdown;
 }
 
 /** Goal */
