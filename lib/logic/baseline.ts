@@ -1,10 +1,10 @@
 // ============================================================
-// LifeXP — Personal Baseline Logic
+// Task Aura — Personal Baseline Logic
 // Maps to Logic System File v2 §5
 // Pure functions — no side effects, no DB access
 // ============================================================
 
-import type { BaselineDelta, DailyMetrics } from "./types";
+import type { BaselineDelta, DailyMetrics, DataMaturity } from "./types";
 import {
   BASELINE_EPSILON,
   MIN_BASELINE_DAYS,
@@ -48,6 +48,18 @@ function mean(values: number[]): number {
 }
 
 // ── Public API ───────────────────────────────────────────────
+
+/**
+ * §5 — Data maturity state based on eligible day count.
+ * - LEARNING: 0–2 days. Starter quests only, no usage claims.
+ * - PROVISIONAL: 3–6 days. Soft insights ("early estimate"), no usage quests.
+ * - ESTABLISHED: 7+ days. Full rule engine (Rules A–D), adaptive difficulty.
+ */
+export function getDataMaturity(eligibleDayCount: number): DataMaturity {
+  if (eligibleDayCount < 3) return "LEARNING";
+  if (eligibleDayCount < 7) return "PROVISIONAL";
+  return "ESTABLISHED";
+}
 
 /**
  * §5 — Check if there's enough history for baseline-driven recommendations.

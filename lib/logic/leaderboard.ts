@@ -98,23 +98,26 @@ export function createLeaderboardSnapshot(
 }
 
 /**
- * Get the start of the current ISO week (Monday 00:00:00).
+ * §14 — Get the start of the current ISO week (Monday 00:00:00.000 UTC).
+ * Global reproducible boundary per specification.
  */
 export function getWeekStart(date: Date): Date {
   const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Monday
-  d.setDate(diff);
-  d.setHours(0, 0, 0, 0);
+  const day = d.getUTCDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  const diff = d.getUTCDate() - day + (day === 0 ? -6 : 1); // Monday
+  d.setUTCDate(diff);
+  d.setUTCHours(0, 0, 0, 0);
+  d.setUTCMilliseconds(0);
   return d;
 }
 
 /**
- * Get the end of the current ISO week (Sunday 23:59:59.999).
+ * §14 — Get the end of the current ISO week (next Monday 00:00:00.000 UTC).
+ * Window is [weekStart, weekEnd).
  */
 export function getWeekEnd(date: Date): Date {
   const start = getWeekStart(date);
   const end = new Date(start);
-  end.setDate(end.getDate() + 7);
+  end.setUTCDate(end.getUTCDate() + 7);
   return end;
 }

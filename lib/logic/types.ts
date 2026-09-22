@@ -1,9 +1,5 @@
+// Task Aura — Core Type Definitions
 // ============================================================
-// LifeXP — Core Type Definitions
-// Maps to Logic System File v2 §3, §7, §8, §9, §13, §14, §19
-// ============================================================
-
-// ── Enums ────────────────────────────────────────────────────
 
 export enum Difficulty {
   EASY = "EASY",
@@ -172,6 +168,8 @@ export interface XPTransaction {
   streakBonus: number;
   createdAt: Date;
   breakdown?: import("./economy").XpBreakdown;
+  status?: "VALID" | "HELD";
+  reversesId?: string | null;
 }
 
 /** Goal */
@@ -217,7 +215,18 @@ export interface AchievementDefinition {
 
 /** Achievement condition — evaluated by achievement engine */
 export interface AchievementCondition {
-  type: "xp_threshold" | "streak_threshold" | "tasks_completed" | "focus_minutes" | "level_reached" | "habits_completed";
+  type:
+    | "xp_threshold"
+    | "streak_threshold"
+    | "tasks_completed"
+    | "focus_minutes"
+    | "level_reached"
+    | "habits_completed"
+    | "focus_completed"
+    | "quests_completed"
+    | "streak_after"
+    | "limit_target_days"
+    | "comeback_after_miss";
   threshold: number;
 }
 
@@ -298,6 +307,20 @@ export interface SyncLogEntry {
   status: SyncStatus;
 }
 
+/** §11 — Streak Day Status */
+export type StreakDayStatus = "SUCCESS" | "GRACE" | "MISS";
+
+/** §11 — Daily streak record (history table) */
+export interface StreakDayRecord {
+  userId: string;
+  localDate: string;
+  status: StreakDayStatus;
+  streakAfter: number;
+}
+
+/** §5 — Data maturity state for user history */
+export type DataMaturity = "LEARNING" | "PROVISIONAL" | "ESTABLISHED";
+
 /** §12 — Streak record */
 export interface StreakRecord {
   userId: string;
@@ -330,4 +353,8 @@ export interface UserStats {
   totalTasksCompleted: number;
   totalFocusMinutes: number;
   totalHabitsCompleted: number;
+  focusSessionsCompleted?: number;
+  questsCompleted?: number;
+  consecutiveMissDaysBeforeFocus?: number;
+  limitTargetDaysHit?: number;
 }

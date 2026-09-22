@@ -1,43 +1,41 @@
 // ============================================================
-// LifeXP — Constants & Configuration
+
+// Task Aura — Constants & Configuration
 // Maps to Logic System File v2 §9, §10, §14
 // ============================================================
 
 import { Difficulty, XPSourceType } from "./types";
+import { ECONOMY } from "./economy";
 
-// ── §10 — XP Base Values (default, overridable via task_type_config) ──
+// ── §9 — Authoritative XP Base Values from ECONOMY ──
 
 export const BASE_XP: Record<XPSourceType, number> = {
-  [XPSourceType.FOCUS_SESSION]: 100,
-  [XPSourceType.TASK]: 150,
-  [XPSourceType.HABIT]: 75,
-  [XPSourceType.AI_QUEST]: 150,
-  [XPSourceType.DAILY_GOAL]: 50,
-  [XPSourceType.STREAK_BONUS]: 25,
-  [XPSourceType.ADJUSTMENT]: 0, // adjustments use explicit amounts
+  [XPSourceType.FOCUS_SESSION]: ECONOMY.base.FOCUS_SESSION,
+  [XPSourceType.TASK]: ECONOMY.base.TASK,
+  [XPSourceType.HABIT]: ECONOMY.base.HABIT,
+  [XPSourceType.AI_QUEST]: ECONOMY.base.AI_QUEST,
+  [XPSourceType.DAILY_GOAL]: ECONOMY.dailyGoalXp,
+  [XPSourceType.STREAK_BONUS]: 0, // Dynamic streak bonus: min(5 × streak_days, 50)
+  [XPSourceType.ADJUSTMENT]: 0, // Adjustments use explicit amounts
 };
 
-// ── §10 — Difficulty Multipliers ──
+// ── §9 — Difficulty Multipliers from ECONOMY ──
 
 export const DIFFICULTY_MULTIPLIER: Record<Difficulty, number> = {
-  [Difficulty.EASY]: 0.8,
-  [Difficulty.NORMAL]: 1.0,
-  [Difficulty.HARD]: 1.25,
-  [Difficulty.EPIC]: 1.5,
+  [Difficulty.EASY]: ECONOMY.difficulty.EASY,
+  [Difficulty.NORMAL]: ECONOMY.difficulty.NORMAL,
+  [Difficulty.HARD]: ECONOMY.difficulty.HARD,
+  [Difficulty.EPIC]: ECONOMY.difficulty.EPIC,
 };
 
-// ── §10 — Streak Bonus ──
+// ── §10 — Streak Bonus from ECONOMY ──
 
 /** Max XP from streak bonus */
-export const MAX_STREAK_BONUS = 50;
+export const MAX_STREAK_BONUS = ECONOMY.streakBonusMax;
 
 /** XP per streak day */
-export const STREAK_BONUS_PER_DAY = 5;
+export const STREAK_BONUS_PER_DAY = ECONOMY.streakBonusPerDay;
 
-// ── §11 — Level System ──
-
-/** Divisor in level formula: level = floor(sqrt(totalXp / LEVEL_XP_DIVISOR)) + 1 */
-export const LEVEL_XP_DIVISOR = 100;
 
 // ── §5 — Baseline Thresholds ──
 

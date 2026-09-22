@@ -1,5 +1,5 @@
 // ============================================================
-// LifeXP — Achievement Engine
+// Task Aura — Achievement Engine
 // Maps to Logic System File v2 §13
 // Pure functions — no side effects, no DB access
 // ============================================================
@@ -7,7 +7,6 @@
 import type {
   AchievementCondition,
   AchievementDefinition,
-  UserAchievement,
   UserStats,
 } from "./types";
 
@@ -179,6 +178,64 @@ export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
     ruleVersion: 1,
     condition: { type: "habits_completed", threshold: 50 },
   },
+
+  // ── §12 — Core Spec Achievement Codes ──
+  {
+    id: "FIRST_FOCUS",
+    name: "First Focus",
+    description: "Complete your first valid focus session",
+    ruleVersion: 2,
+    condition: { type: "focus_completed", threshold: 1 },
+  },
+  {
+    id: "FOCUS_5",
+    name: "Focus Novice",
+    description: "Complete 5 valid focus sessions",
+    ruleVersion: 2,
+    condition: { type: "focus_completed", threshold: 5 },
+  },
+  {
+    id: "FIRST_QUEST",
+    name: "Quest Seeker",
+    description: "Complete your first quest",
+    ruleVersion: 2,
+    condition: { type: "quests_completed", threshold: 1 },
+  },
+  {
+    id: "TASKS_25",
+    name: "Quarter Century Tasks",
+    description: "Complete 25 tasks",
+    ruleVersion: 2,
+    condition: { type: "tasks_completed", threshold: 25 },
+  },
+  {
+    id: "CONSISTENCY_7",
+    name: "Week of Consistency",
+    description: "Maintain a 7-day streak",
+    ruleVersion: 2,
+    condition: { type: "streak_after", threshold: 7 },
+  },
+  {
+    id: "BALANCED_WEEK",
+    name: "Balanced Week",
+    description: "Meet limit-category target on >= 5 of 7 eligible days",
+    ruleVersion: 2,
+    condition: { type: "limit_target_days", threshold: 5 },
+  },
+  {
+    id: "COMEBACK",
+    name: "The Comeback",
+    description: "Complete a valid session after >= 3 consecutive miss days",
+    ruleVersion: 2,
+    condition: { type: "comeback_after_miss", threshold: 3 },
+  },
+  {
+    id: "LEVEL_10",
+    name: "Adept",
+    description: "Reach Level 10",
+    ruleVersion: 2,
+    condition: { type: "level_reached", threshold: 10 },
+  },
 ];
 
 // ── Public API ───────────────────────────────────────────────
@@ -203,6 +260,16 @@ export function checkCondition(
       return stats.level >= condition.threshold;
     case "habits_completed":
       return stats.totalHabitsCompleted >= condition.threshold;
+    case "focus_completed":
+      return (stats.focusSessionsCompleted ?? 0) >= condition.threshold;
+    case "quests_completed":
+      return (stats.questsCompleted ?? 0) >= condition.threshold;
+    case "streak_after":
+      return stats.currentStreak >= condition.threshold;
+    case "limit_target_days":
+      return (stats.limitTargetDaysHit ?? 0) >= condition.threshold;
+    case "comeback_after_miss":
+      return (stats.consecutiveMissDaysBeforeFocus ?? 0) >= condition.threshold;
     default:
       return false;
   }

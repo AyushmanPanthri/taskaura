@@ -1,64 +1,100 @@
 // ============================================================
-// LifeXP — Prisma Schema (Reference / Documentation)
-// Maps to Logic System File v2 §19
-//
-// NOTE: Prisma v8 requires postgres/mongodb. This schema file
-// serves as the canonical data model reference. The actual
-// runtime uses an in-memory store (lib/services/store.ts)
-// that mirrors these tables for hackathon MVP.
+// TaskAura — Canonical Production Prisma Schema (PostgreSQL)
+// Maps to TaskAura / LifeXP Logic System File v2 §19
 // ============================================================
 
-// To use with PostgreSQL, run:
-//   npx prisma orm init --target postgres --authoring psl
-// Then replace the generated schema with this content.
-
-/*
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
 }
 
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  passwordHash String
-  displayName  String
-  timezone     String   @default("UTC")
-  createdAt    DateTime @default(now())
+  id           String   @id @default(uuid()) @db.Uuid
+  displayName  String?  @default("Adventurer") @map("name") @db.VarChar(100)
+  email        String?  @unique @map("email") @db.VarChar(255)
+  passwordHash String?  @map("password_hash")
+  isGuest      Boolean  @default(false) @map("is_guest")
+  avatar       String?  @default("🧑‍💻") @map("avatar") @db.VarChar(50)
+  role         Role     @default(USER) @map("role")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
 
-  settings        UserSettings?
-  usageSessions   UsageSession[]
-  goals           Goal[]
-  tasks           Task[]
-  habits          Habit[]
-  dailyMetrics    DailyMetrics[]
-  focusSessions   FocusSession[]
-  xpTransactions  XPTransaction[]
+  accounts         Account[]
+  sessions         Session[]
+  settings         UserSettings?
+  usageSessions    UsageSession[]
+  goals            Goal[]
+  tasks            Task[]
+  habits           Habit[]
+  dailyMetrics     DailyMetrics[]
+  focusSessions    FocusSession[]
+  xpTransactions   XPTransaction[]
   userAchievements UserAchievement[]
-  quests          Quest[]
-  aiInsights      AIInsight[]
-  weeklyScores    WeeklyScore[]
-  syncLogs        SyncLog[]
-  streakRecord    StreakRecord?
+  quests           Quest[]
+  aiInsights       AIInsight[]
+  weeklyScores     WeeklyScore[]
+  syncLogs         SyncLog[]
+  streakRecord     StreakRecord?
+
+  @@index([email])
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(uuid())
+  userId            String
+  type              String  @default("oauth")
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  token     String   @unique @map("session_token")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@map("sessions")
 }
 
 model UserSettings {
-  id                 String  @id @default(uuid())
-  userId             String  @unique
-  dailyGoalXp        Int     @default(500)
+  id                  String  @id @default(uuid())
+  userId              String  @unique
+  dailyGoalXp         Int     @default(500)
   weekdayWeekendSplit Boolean @default(false)
-  retentionDays      Int     @default(90)
+  retentionDays       Int     @default(90)
 
-  user User @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model UsageSession {
   id              String   @id @default(uuid())
-  clientEventId   String   @unique  // §3 v2: dedup key
+  clientEventId   String   @unique // §3 v2: dedup key
   userId          String
   packageName     String
   appName         String
@@ -70,7 +106,9 @@ model UsageSession {
   source          String
   syncStatus      String   @default("PENDING")
 
-  user User @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
 }
 
 model Goal {
@@ -84,7 +122,9 @@ model Goal {
   status       String   @default("ACTIVE")
   createdAt    DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
 }
 
 model Task {
@@ -100,7 +140,9 @@ model Task {
   questId     String?
   createdAt   DateTime  @default(now())
 
-  user User @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
 }
 
 model Habit {
@@ -112,8 +154,10 @@ model Habit {
   streakBest    Int       @default(0)
   createdAt     DateTime  @default(now())
 
-  user      User       @relation(fields: [userId], references: [id])
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   habitLogs HabitLog[]
+
+  @@index([userId])
 }
 
 model HabitLog {
@@ -122,9 +166,10 @@ model HabitLog {
   date      String  // YYYY-MM-DD
   completed Boolean
 
-  habit Habit @relation(fields: [habitId], references: [id])
+  habit Habit @relation(fields: [habitId], references: [id], onDelete: Cascade)
 
   @@unique([habitId, date])
+  @@index([habitId])
 }
 
 model DailyMetrics {
@@ -143,14 +188,15 @@ model DailyMetrics {
   taskReliability    Float  @default(0)
   routineStability   Float  @default(0)
 
-  user User @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, date])  // §4: idempotent aggregation
+  @@unique([userId, date]) // §4: idempotent aggregation
+  @@index([userId, date])
 }
 
 model FocusSession {
   id                 String    @id @default(uuid())
-  clientEventId      String    @unique  // dedup key
+  clientEventId      String    @unique // dedup key
   userId             String
   status             String    @default("RUNNING")
   startedAt          DateTime  @default(now())
@@ -159,8 +205,11 @@ model FocusSession {
   actualMinutes      Float     @default(0)
   heartbeatCount     Int       @default(0)
   expectedHeartbeats Int       @default(0)
+  lastHeartbeatAt    DateTime  @default(now())
 
-  user User @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
 }
 
 model XPTransaction {
@@ -170,15 +219,16 @@ model XPTransaction {
   sourceType           String
   sourceId             String
   rewardType           String
-  idempotencyKey       String   @unique  // §9 v2: hash(sourceType+sourceId+rewardType)
+  idempotencyKey       String   // §9.3 v2: payout:{rootType}:{rootId}
   baseXp               Int
   difficultyMultiplier Float
   streakBonus          Int      @default(0)
   createdAt            DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([sourceType, sourceId, rewardType])  // §9 v2: DB-level uniqueness
+  @@unique([userId, idempotencyKey]) // §9.4 / §15: CONSTRAINT uq_xp_idem UNIQUE (user_id, idempotency_key)
+  @@index([userId, createdAt])
 }
 
 model Achievement {
@@ -197,10 +247,11 @@ model UserAchievement {
   achievementId String
   unlockedAt    DateTime @default(now())
 
-  user        User        @relation(fields: [userId], references: [id])
-  achievement Achievement @relation(fields: [achievementId], references: [id])
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, achievementId])  // §13 v2: one unlock per achievement
+  @@unique([userId, achievementId]) // §13 v2: one unlock per achievement
+  @@index([userId])
 }
 
 model Quest {
@@ -210,11 +261,13 @@ model Quest {
   description    String
   difficulty     String   @default("NORMAL")
   status         String   @default("ACTIVE")
-  triggeringRule  String   // AIRuleId
+  triggeringRule String   // AIRuleId
   sourceMetrics  String   // JSON
   createdAt      DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
 }
 
 model AIInsight {
@@ -225,7 +278,9 @@ model AIInsight {
   sourceMetricsJson String   // JSON: triggering metrics
   createdAt         DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }
 
 model WeeklyScore {
@@ -237,12 +292,12 @@ model WeeklyScore {
   rank       Int      @default(0)
   snapshotAt DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, weekStart])
+  @@index([weekStart, totalXp])
 }
 
-// §19 v2 — Task type config (tunable XP economy)
 model TaskTypeConfig {
   id     String  @id @default(uuid())
   type   String  @unique
@@ -250,7 +305,6 @@ model TaskTypeConfig {
   active Boolean @default(true)
 }
 
-// §19 v2 — Sync audit log
 model SyncLog {
   id            String   @id @default(uuid())
   userId        String
@@ -258,17 +312,18 @@ model SyncLog {
   receivedAt    DateTime @default(now())
   status        String
 
-  user User @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, clientEventId])
 }
 
 model StreakRecord {
-  id                 String  @id @default(uuid())
-  userId             String  @unique
-  currentStreak      Int     @default(0)
-  bestStreak         Int     @default(0)
-  lastEligibleDate   String? // YYYY-MM-DD
-  graceUsedThisWeek  Boolean @default(false)
+  id                String  @id @default(uuid())
+  userId            String  @unique
+  currentStreak     Int     @default(0)
+  bestStreak        Int     @default(0)
+  lastEligibleDate  String? // YYYY-MM-DD
+  graceUsedThisWeek Boolean @default(false)
 
-  user User @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
-*/

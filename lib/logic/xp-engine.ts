@@ -1,5 +1,5 @@
 // ============================================================
-// LifeXP — XP Engine
+// Task Aura — XP Engine
 // Maps to Logic System File v2 §9, §10, §11
 // Pure functions — no side effects, no DB access
 // ============================================================
@@ -16,6 +16,7 @@ import {
   MAX_STREAK_BONUS,
   STREAK_BONUS_PER_DAY,
 } from "./constants";
+import { roundXp } from "./economy";
 
 /**
  * §10 — Calculate reward XP based on base value and difficulty.
@@ -27,7 +28,7 @@ export function calculateRewardXp(
   difficulty: Difficulty
 ): number {
   const multiplier = DIFFICULTY_MULTIPLIER[difficulty];
-  return Math.round(baseXp * multiplier);
+  return roundXp(baseXp * multiplier);
 }
 
 /**

@@ -186,3 +186,96 @@ export function isDayEligible(
   const completed = logsForDate.filter((l) => l.completed).length;
   return completed / logsForDate.length >= requiredCompletionRatio;
 }
+
+// ── §11 — Authoritative v2 Streak Day State Machine ───────────
+
+import { ECONOMY } from "./economy";
+import type { StreakDayStatus } from "./types";
+
+export interface StreakDayState {
+  streakAfter: number;
+  status: StreakDayStatus;
+  graceTokens: number;
+  longestStreak: number;
+}
+
+export interface DayCommitmentEvidence {
+  verifiedFocusMinutes?: number;
+  allRequiredHabitsLogged?: boolean;
+  completedTasksCount?: number;
+}
+
+/**
+ * §11 — Determine whether the daily commitment was met.
+ * Default commitment: at least 25 verified focus minutes OR all required habits logged.
+ */
+export function isCommitmentMet(evidence: DayCommitmentEvidence): boolean {
+  if (
+    evidence.verifiedFocusMinutes != null &&
+    evidence.verifiedFocusMinutes >= ECONOMY.dailyCommitmentFocusMinutes
+  ) {
+    return true;
+  }
+  if (evidence.allRequiredHabitsLogged === true) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * §11 — Authoritative closeDay state machine (runs at local 03:00 on d+1; idempotent).
+ *
+ * Rules:
+ * - If success(d):
+ *     streak = (prev.status in (SUCCESS, GRACE)) ? prev.streak_after + 1 : 1
+ *     status = SUCCESS
+ *     if streak % 7 == 0: tokens = min(tokens + 1, 2)
+ * - Else if tokens > 0 and prev.streak_after > 0:
+ *     streak = prev.streak_after
+ *     status = GRACE
+ *     tokens -= 1
+ * - Else:
+ *     streak = 0
+ *     status = MISS
+ */
+export function closeDay(
+  prevState: {
+    streakAfter: number;
+    status?: StreakDayStatus;
+    graceTokens: number;
+    longestStreak?: number;
+  },
+  isSuccess: boolean
+): StreakDayState {
+  let s = 0;
+  let status: StreakDayStatus = "MISS";
+  let tokens = prevState.graceTokens;
+
+  const prevActive =
+    prevState.status === undefined ||
+    prevState.status === "SUCCESS" ||
+    prevState.status === "GRACE";
+
+  if (isSuccess) {
+    s = prevActive && prevState.streakAfter > 0 ? prevState.streakAfter + 1 : 1;
+    status = "SUCCESS";
+    if (s % 7 === 0) {
+      tokens = Math.min(tokens + 1, 2);
+    }
+  } else if (tokens > 0 && prevState.streakAfter > 0) {
+    s = prevState.streakAfter;
+    status = "GRACE";
+    tokens -= 1;
+  } else {
+    s = 0;
+    status = "MISS";
+  }
+
+  const longestStreak = Math.max(prevState.longestStreak ?? 0, s);
+  return {
+    streakAfter: s,
+    status,
+    graceTokens: tokens,
+    longestStreak,
+  };
+}

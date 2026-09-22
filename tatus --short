@@ -1,0 +1,42 @@
+warning: in the working copy of '.gitignore', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/layout.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'eslint.config.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/logic/achievement-engine.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/logic/ai-rules.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/logic/baseline.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/logic/constants.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/logic/economy.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/logic/leaderboard.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/logic/streak.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/logic/types.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/logic/xp-engine.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/services/focus-service.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/services/index.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/services/store.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/services/xp-service.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'next.config.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'package-lock.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'package.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'prisma/schema.prisma', LF will be replaced by CRLF the next time Git touches it
+ .gitignore                      |    1 [32m+[m
+ app/layout.tsx                  |   18 [32m+[m[31m-[m
+ app/page.tsx                    |  645 [31m-----[m
+ eslint.config.mjs               |    1 [32m+[m
+ lib/logic/achievement-engine.ts |   71 [32m+[m[31m-[m
+ lib/logic/ai-rules.ts           |    3 [32m+[m[31m-[m
+ lib/logic/baseline.ts           |   16 [32m+[m[31m-[m
+ lib/logic/constants.ts          |   40 [32m+[m[31m-[m
+ lib/logic/economy.ts            |  167 [32m+[m[31m-[m
+ lib/logic/leaderboard.ts        |   17 [32m+[m[31m-[m
+ lib/logic/streak.ts             |   93 [32m+[m
+ lib/logic/types.ts              |   39 [32m+[m[31m-[m
+ lib/logic/xp-engine.ts          |    5 [32m+[m[31m-[m
+ lib/services/focus-service.ts   |   49 [32m+[m[31m-[m
+ lib/services/index.ts           |    3 [32m+[m
+ lib/services/store.ts           |   72 [32m+[m
+ lib/services/xp-service.ts      |    2 [32m+[m
+ next.config.ts                  |    2 [32m+[m[31m-[m
+ package-lock.json               | 6009 [32m++++++++++[m[31m-----------------------------[m
+ package.json                    |   10 [32m+[m[31m-[m
+ prisma/schema.prisma            |  195 [32m+[m[31m-[m
+ 21 files changed, 2171 insertions(+), 5287 deletions(-)

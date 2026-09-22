@@ -20,9 +20,11 @@ import type {
   UserAchievement,
   SyncLogEntry,
   TaskTypeConfig,
+  StreakDayRecord,
 } from "../logic/types";
 import { XPSourceType } from "../logic/types";
 import { BASE_XP } from "../logic/constants";
+import { levelFor } from "../logic/economy";
 
 // ── User ─────────────────────────────────────────────────────
 
@@ -60,6 +62,11 @@ class InMemoryStore {
   aiInsights = new Map<string, AIInsight>();
   weeklyScores: WeeklyScore[] = [];
   streakRecords = new Map<string, StreakRecord>(); // key: userId
+  streakDays = new Map<string, StreakDayRecord>(); // key: `${userId}::${localDate}`
+  userProgressCache = new Map<
+    string,
+    { totalXp: number; level: number; longestStreak: number; graceTokens: number }
+  >();
   syncLogs: SyncLogEntry[] = [];
   taskTypeConfigs = new Map<string, TaskTypeConfig>();
 
@@ -163,8 +170,18 @@ class InMemoryStore {
     if (this.xpByKey.has(k)) {
       return false; // Duplicate — idempotent no-op
     }
+    tx.status = tx.status ?? "VALID";
     this.xpByKey.set(k, tx);
     this.xpTransactions.set(tx.id, tx);
+
+    // Keep user_progress cache updated
+    const cached = this.userProgressCache.get(tx.userId);
+    if (cached) {
+      if (tx.status === "VALID") {
+        cached.totalXp += tx.amount;
+        cached.level = levelFor(cached.totalXp);
+      }
+    }
     return true;
   }
 
@@ -204,6 +221,19 @@ class InMemoryStore {
   }
 
   /**
+   * Add habit log enforcing UNIQUE(habit_id, date).
+   * Returns false if duplicate.
+   */
+  addHabitLog(log: HabitLog): boolean {
+    const key = `${log.habitId}::${log.date}`;
+    if (this.habitLogs.has(key)) {
+      return false; // Duplicate
+    }
+    this.habitLogs.set(key, log);
+    return true;
+  }
+
+  /**
    * Upsert daily metrics (idempotent — always replaces for userId+date).
    */
   upsertDailyMetrics(metrics: DailyMetrics): void {
@@ -216,6 +246,46 @@ class InMemoryStore {
    */
   upsertStreakRecord(record: StreakRecord): void {
     this.streakRecords.set(record.userId, record);
+  }
+
+  /**
+   * Upsert a daily streak history entry (idempotent for userId+localDate).
+   */
+  upsertStreakDay(record: StreakDayRecord): void {
+    const key = `${record.userId}::${record.localDate}`;
+    this.streakDays.set(key, record);
+  }
+
+  /**
+   * Get all streak days for a user, sorted by date.
+   */
+  getUserStreakDays(userId: string): StreakDayRecord[] {
+    return Array.from(this.streakDays.values())
+      .filter((s) => s.userId === userId)
+      .sort((a, b) => a.localDate.localeCompare(b.localDate));
+  }
+
+  /**
+   * §19 — Reconcile user_progress cache from authoritative XP ledger rows.
+   * Compares cached total with SUM(amount WHERE status = VALID) and repairs if mismatched.
+   */
+  reconcileUserProgress(userId: string): { totalXp: number; level: number; repaired: boolean } {
+    const ledgerTotal = this.getUserXpTransactions(userId)
+      .filter((t) => t.status === "VALID" || t.status === undefined)
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    const cached = this.userProgressCache.get(userId);
+    const repaired = cached === undefined || cached.totalXp !== ledgerTotal;
+
+    const level = levelFor(ledgerTotal);
+    const updated = {
+      totalXp: ledgerTotal,
+      level,
+      longestStreak: cached?.longestStreak ?? 0,
+      graceTokens: cached?.graceTokens ?? 1,
+    };
+    this.userProgressCache.set(userId, updated);
+    return { totalXp: ledgerTotal, level, repaired };
   }
 
   /**
@@ -237,6 +307,8 @@ class InMemoryStore {
     this.aiInsights.clear();
     this.weeklyScores = [];
     this.streakRecords.clear();
+    this.streakDays.clear();
+    this.userProgressCache.clear();
     this.syncLogs = [];
     this.xpByKey.clear();
     this.clientEventIds.clear();

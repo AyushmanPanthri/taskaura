@@ -17,6 +17,7 @@ import { completeTask, taskRootRef } from "./task-service";
 import {
   ECONOMY,
   focusCreditedMinutes,
+  isClockPlausible,
   payoutKey,
 } from "../logic/economy";
 import {
@@ -114,13 +115,32 @@ export function startFocusSession(params: {
 
 /**
  * §8 — Record a heartbeat ping from the client (~every 30–60 s).
+ * Validates session ownership, RUNNING status, and timestamp plausibility.
  */
-export function recordHeartbeat(sessionId: string): FocusSession {
+export function recordHeartbeat(
+  sessionId: string,
+  userId?: string,
+  clientTimestamp?: number
+): FocusSession {
   const session = store.focusSessions.get(sessionId);
   if (!session) throw new Error(`Focus session not found: ${sessionId}`);
 
+  if (userId && session.userId !== userId) {
+    throw new Error(`Unauthorized heartbeat for session: ${sessionId}`);
+  }
+
   if (session.status !== FocusSessionStatus.RUNNING) {
     throw new Error(`Cannot record heartbeat for ${session.status} session`);
+  }
+
+  // Clock plausibility check
+  if (clientTimestamp !== undefined) {
+    const now = Date.now();
+    const driftSeconds = Math.abs(now - clientTimestamp) / 1000;
+    if (driftSeconds > 120) {
+      // Skew exceeds 2 minutes: flag as suspicious
+      console.warn(`[Heartbeat] Clock skew detected (${driftSeconds}s) on session ${sessionId}`);
+    }
   }
 
   const updated: FocusSession = {
@@ -154,7 +174,8 @@ function paidForSession(session: FocusSession): number {
  */
 export function completeFocusSession(
   sessionId: string,
-  streakDays: number = 0
+  streakDays: number = 0,
+  options?: { clientElapsedSeconds?: number; completedAt?: Date }
 ): {
   session: FocusSession;
   xpAwarded: number;
@@ -183,8 +204,30 @@ export function completeFocusSession(
     throw new Error(`Cannot complete session in ${session.status} status`);
   }
 
-  const completedAt = new Date(); // server clock
+  const completedAt = options?.completedAt ?? new Date(); // server clock
   const actualMinutes = calculateActualMinutes(session.startedAt, completedAt);
+
+  // Clock plausibility check (§8): |server_duration - client_elapsed| <= max(60s, 10%)
+  if (options?.clientElapsedSeconds !== undefined) {
+    const serverDurationSeconds = (completedAt.getTime() - session.startedAt.getTime()) / 1000;
+    if (!isClockPlausible(serverDurationSeconds, options.clientElapsedSeconds)) {
+      const abandoned: FocusSession = {
+        ...session,
+        status: FocusSessionStatus.ABANDONED,
+        completedAt,
+        actualMinutes,
+      };
+      store.focusSessions.set(sessionId, abandoned);
+      return {
+        session: abandoned,
+        xpAwarded: 0,
+        bonusXp: 0,
+        capped: false,
+        isDuplicate: false,
+        evidenceOnly: false,
+      };
+    }
+  }
 
   const updatedSession: FocusSession = {
     ...session,

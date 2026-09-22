@@ -9,3 +9,6 @@ export * from "./focus-service";
 export * from "./aggregation-service";
 export * from "./leaderboard-service";
 export * from "./sync-service";
+export * from "./habit-service";
+export * from "./progress-service";
+export * from "./demo-seed";

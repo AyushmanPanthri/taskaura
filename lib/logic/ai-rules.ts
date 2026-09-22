@@ -255,7 +255,8 @@ function evaluateRuleB(context: AIContext): AIRuleResult {
  * to lower difficulty, not to penalize.
  */
 function evaluateRuleC(context: AIContext): AIRuleResult {
-  // This rule needs quest history which isn't in the standard context
+  // Silence unused param: Rule C needs quest history which isn't in the standard context
+  void context;
   // It would be evaluated separately when generating new quests
   // For now, return not-fired (the difficulty engine handles adaptation)
   return notFired(AIRuleId.RULE_C);

@@ -315,6 +315,8 @@ export function reverseTransaction(
     baseXp: 0,
     difficultyMultiplier: 1,
     streakBonus: 0,
+    status: "VALID",
+    reversesId: originalTransactionId,
     createdAt: now,
     breakdown: {
       kind: "REVERSAL",
