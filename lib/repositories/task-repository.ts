@@ -764,6 +764,74 @@ export class TaskRepository {
         };
       }
 
+      // 10a. Self-confirmed daily limit (5 XP-earning SELF_CONFIRMED task completions per day).
+      // Runs before suspicious-pattern detection so the reason is always specific.
+      // Verification for this task is SELF_CONFIRMED (focusVerified is never true from the
+      // public route). We count paid TASK/COMPLETION transactions today as the proxy —
+      // the same mechanism used by dailyTaskXpCap above.
+      if (verification === "SELF_CONFIRMED") {
+        const selfConfirmedToday = await tx.xPTransaction.count({
+          where: {
+            userId,
+            sourceType: "TASK",
+            rewardType: "COMPLETION",
+            createdAt: { gte: todayStart },
+          },
+        });
+
+        if (selfConfirmedToday >= ECONOMY.selfConfirmedTasksPerDay) {
+          const updated = await tx.task.update({
+            where: { id: taskId },
+            data: {
+              status: TaskStatus.COMPLETED,
+              completedAt: serverNow,
+              completionAttempts: { increment: 1 },
+            },
+          });
+
+          await tx.adminAuditLog.create({
+            data: {
+              adminUserId: userId,
+              action: "TASK_COMPLETED_ZERO_XP",
+              targetUserId: userId,
+              metadata: JSON.stringify({
+                taskId,
+                title: taskRow.title,
+                reason: "SELF_CONFIRMED_LIMIT",
+                selfConfirmedToday,
+                limit: ECONOMY.selfConfirmedTasksPerDay,
+                serverTimestamp: serverNow.toISOString(),
+                paidXp: 0,
+              }),
+              createdAt: serverNow,
+            },
+          });
+
+          return {
+            task: {
+              id: updated.id,
+              userId: updated.userId,
+              title: updated.title,
+              description: updated.description,
+              difficulty: updated.difficulty as Difficulty,
+              status: TaskStatus.COMPLETED,
+              startedAt: updated.startedAt,
+              completedAt: updated.completedAt,
+              estimatedMinutes: updated.estimatedMinutes,
+              completionAttempts: updated.completionAttempts,
+              dueAt: updated.dueAt,
+              source: updated.source as TaskSource,
+              questId: updated.questId,
+              createdAt: updated.createdAt,
+            },
+            isDuplicate: false,
+            xpAwarded: 0,
+            bonusXp: 0,
+            reason: "SELF_CONFIRMED_LIMIT",
+          };
+        }
+      }
+
       // 10. Suspicious Pattern Detection
       const past24h = new Date(serverNow.getTime() - 24 * 60 * 60_000);
       const recentCompletedRows = await tx.task.findMany({
