@@ -8,7 +8,8 @@
 // visible logout actions, and global XP toast container.
 // ============================================================
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { CelebrationOverlay, type CelebrationKind } from "./CelebrationOverlay";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
@@ -42,15 +43,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     role?: string;
   } | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [celebration, setCelebration] = useState<CelebrationKind | null>(null);
+  // Track the last known level so we can detect when the server confirms a level-up.
+  const prevLevelRef = useRef<number | null>(null);
 
   // Synchronize mini-profile progress and user profile from authoritative API
   useEffect(() => {
     let cancelled = false;
-    async function loadProgress() {
+    async function loadProgress(checkLevelUp = false) {
       try {
         const res = await fetch("/api/v1/progress");
         const json = await res.json();
         if (!cancelled && json.success) {
+          const newLevel: number = json.data.level;
+          if (
+            checkLevelUp &&
+            prevLevelRef.current !== null &&
+            newLevel > prevLevelRef.current
+          ) {
+            window.dispatchEvent(new CustomEvent("taskaura:level-up"));
+          }
+          prevLevelRef.current = newLevel;
           setProgress(json.data);
         }
       } catch {
@@ -85,8 +98,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       const customEvent = e as CustomEvent<{ amount: number; label: string }>;
       if (customEvent.detail) {
         setToast(customEvent.detail);
-        void loadProgress();
+        // Pass checkLevelUp=true so we detect a server-confirmed level increase.
+        void loadProgress(true);
       }
+    };
+
+    // prefers-reduced-motion guard: skip video if the OS requests reduced motion.
+    const motionOk = () =>
+      !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    // Level-up celebration
+    const onLevelUp = () => {
+      if (motionOk()) setCelebration("level-up");
+    };
+
+    // Quest-complete celebration
+    const onQuestComplete = () => {
+      if (motionOk()) setCelebration("quest-complete");
     };
 
     // Listen for profile update events
@@ -96,11 +124,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
     window.addEventListener("taskaura:xp", onXpAwarded);
     window.addEventListener("taskaura:profile-updated", onProfileUpdated);
+    window.addEventListener("taskaura:level-up", onLevelUp);
+    window.addEventListener("taskaura:quest-complete", onQuestComplete);
 
     return () => {
       cancelled = true;
       window.removeEventListener("taskaura:xp", onXpAwarded);
       window.removeEventListener("taskaura:profile-updated", onProfileUpdated);
+      window.removeEventListener("taskaura:level-up", onLevelUp);
+      window.removeEventListener("taskaura:quest-complete", onQuestComplete);
     };
   }, [pathname]);
 
@@ -127,9 +159,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // If on login page or admin portal, render children directly without normal app shell sidebar
+  // If on login page or admin portal, render children directly without normal app shell sidebar.
+  // CelebrationOverlay is still mounted so it can show if the user navigates.
   if (pathname === "/login" || pathname?.startsWith("/admin")) {
-    return <>{children}</>;
+    return (
+      <>
+        {children}
+        <CelebrationOverlay
+          kind={celebration}
+          onDismiss={() => setCelebration(null)}
+        />
+      </>
+    );
   }
 
   const level = progress?.level ?? 1;
@@ -309,6 +350,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
 
+      {/* ── Celebration Video Overlay ─────────────────────── */}
+      <CelebrationOverlay
+        kind={celebration}
+        onDismiss={() => setCelebration(null)}
+      />
+
       {/* ── Global XP Toast ─────────────────────────────────── */}
       {toast && (
         <div
@@ -334,5 +381,17 @@ export function triggerXpToast(amount: number, label: string) {
         detail: { amount, label },
       })
     );
+  }
+}
+
+/**
+ * Helper function called by task-completion handlers when the server
+ * confirms that the completed task belonged to a quest (questId != null).
+ * The overlay plays ONLY after the server confirms — this helper must
+ * only be called with a server-confirmed quest completion result.
+ */
+export function triggerQuestCelebration() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("taskaura:quest-complete"));
   }
 }

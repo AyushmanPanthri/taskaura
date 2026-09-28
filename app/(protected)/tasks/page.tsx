@@ -7,7 +7,7 @@
 // ============================================================
 
 import React, { useState, useEffect, useCallback } from "react";
-import { triggerXpToast } from "@/components/AppShell";
+import { triggerXpToast, triggerQuestCelebration } from "@/components/AppShell";
 import { AiProposalCard } from "@/components/AiProposalCard";
 import { EmptyState, ErrorState } from "@/components/States";
 import type { Task, Difficulty } from "@/lib/logic/types";
@@ -80,6 +80,10 @@ export default function TasksPage() {
       if (json.success) {
         if (json.data.xpAwarded > 0) {
           triggerXpToast(json.data.xpAwarded, `Completed: ${json.data.task.title}`);
+          // Fire quest-complete celebration only after server confirms a quest task.
+          if (json.data.task.questId) {
+            triggerQuestCelebration();
+          }
         }
         await fetchTasks();
       }
