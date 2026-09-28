@@ -1,67 +1,89 @@
 // ============================================================
 // LifeXP — Leaderboard Service
-// Maps to Logic System File v2 §18
-// Combines leaderboard logic + persistence
+// PostgreSQL-backed Leaderboard Service
 // ============================================================
 
-import { store } from "./store";
-import {
-  createLeaderboardSnapshot,
-  getWeekStart,
-  getWeekEnd,
-} from "../logic/leaderboard";
+import { prisma } from "../prisma";
+import { getWeekStart, getWeekEnd } from "../logic/leaderboard";
 import type { WeeklyScore } from "../logic/types";
 
 /**
- * §18 v2 — Snapshot the leaderboard (scheduled job).
- *
- * NOT computed live per request. Scheduled every 15-30 minutes
- * during the active week, finalized at week_end.
- * GET /leaderboard reads the snapshot from store directly.
+ * Snapshot the leaderboard into PostgreSQL (scheduled job).
  */
-export function snapshotLeaderboard(
+export async function snapshotLeaderboard(
   weekStart?: Date,
   weekEnd?: Date
-): WeeklyScore[] {
+): Promise<void> {
   const now = new Date();
   const start = weekStart ?? getWeekStart(now);
   const end = weekEnd ?? getWeekEnd(now);
-
-  const allTransactions = Array.from(store.xpTransactions.values());
-  const snapshot = createLeaderboardSnapshot(allTransactions, start, end);
-
-  // Replace current week's scores in store
   const weekStartStr = start.toISOString().slice(0, 10);
-  store.weeklyScores = store.weeklyScores.filter(
-    (s) => s.weekStart !== weekStartStr
-  );
-  store.weeklyScores.push(...snapshot);
+  const weekEndStr = end.toISOString().slice(0, 10);
 
-  return snapshot;
+  const weekEndExclusive = new Date(end);
+  weekEndExclusive.setDate(weekEndExclusive.getDate() + 1);
+
+  const weeklyXpRows = await prisma.xPTransaction.groupBy({
+    by: ["userId"],
+    where: {
+      createdAt: {
+        gte: start,
+        lt: weekEndExclusive,
+      },
+    },
+    _sum: { amount: true },
+    orderBy: { _sum: { amount: "desc" } },
+  });
+
+  let rank = 1;
+  for (const row of weeklyXpRows) {
+    await prisma.weeklyScore.upsert({
+      where: {
+        userId_weekStart: {
+          userId: row.userId,
+          weekStart: weekStartStr,
+        },
+      },
+      create: {
+        userId: row.userId,
+        weekStart: weekStartStr,
+        weekEnd: weekEndStr,
+        totalXp: row._sum.amount ?? 0,
+        rank,
+      },
+      update: {
+        totalXp: row._sum.amount ?? 0,
+        rank,
+        snapshotAt: new Date(),
+      },
+    });
+    rank++;
+  }
 }
 
-/**
- * §18 — Get the leaderboard for a given week.
- *
- * Reads the pre-computed snapshot. Guarantees all users see
- * identical data at the same moment.
- */
-export function getLeaderboard(weekStart?: string): WeeklyScore[] {
-  const targetWeek =
-    weekStart ?? getWeekStart(new Date()).toISOString().slice(0, 10);
+export async function getWeeklyLeaderboard(targetDate: Date = new Date()) {
+  const start = getWeekStart(targetDate);
+  const end = getWeekEnd(targetDate);
+  const weekEndExclusive = new Date(end);
+  weekEndExclusive.setDate(weekEndExclusive.getDate() + 1);
 
-  return store.weeklyScores
-    .filter((s) => s.weekStart === targetWeek)
-    .sort((a, b) => a.rank - b.rank);
+  const weeklyXpRows = await prisma.xPTransaction.groupBy({
+    by: ["userId"],
+    where: {
+      createdAt: {
+        gte: start,
+        lt: weekEndExclusive,
+      },
+    },
+    _sum: { amount: true },
+    orderBy: { _sum: { amount: "desc" } },
+    take: 100,
+  });
+
+  return weeklyXpRows.map((r, i) => ({
+    userId: r.userId,
+    xp: r._sum.amount ?? 0,
+    rank: i + 1,
+  }));
 }
 
-/**
- * Get a user's rank for the current week.
- */
-export function getUserRank(
-  userId: string,
-  weekStart?: string
-): WeeklyScore | null {
-  const board = getLeaderboard(weekStart);
-  return board.find((s) => s.userId === userId) ?? null;
-}

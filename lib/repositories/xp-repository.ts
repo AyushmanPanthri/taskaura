@@ -102,6 +102,34 @@ export class XPRepository {
       throw err;
     }
   }
+
+  async reverseTransaction(userId: string, originalTransactionId: string, reason?: string) {
+    const original = await prisma.xPTransaction.findUnique({
+      where: { id: originalTransactionId },
+    });
+    if (!original || original.userId !== userId) {
+      throw new Error(`Transaction not found: ${originalTransactionId}`);
+    }
+    if (original.amount <= 0) {
+      throw new Error("Only positive transactions can be reversed");
+    }
+    const key = `reversal:${originalTransactionId}`;
+    const result = await this.recordTransaction({
+      userId,
+      amount: -original.amount,
+      sourceType: XPSourceType.ADJUSTMENT,
+      sourceId: `reversal:${originalTransactionId}`,
+      rewardType: RewardType.ADJUSTMENT,
+      idempotencyKey: key,
+      baseXp: 0,
+      difficultyMultiplier: 1,
+      streakBonus: 0,
+    });
+    return {
+      transaction: result.transaction,
+      isNew: !result.isDuplicate,
+    };
+  }
 }
 
 export const xpRepository = new XPRepository();

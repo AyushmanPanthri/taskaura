@@ -2,13 +2,15 @@
 // Task Aura — /api/v1/tasks/:id
 // GET:   Fetch single task
 // PATCH: Update task details or transition status
+//
+// MIGRATION (Stage 3): Previously read/wrote to InMemoryStore.
+// Now uses taskRepository (Prisma) for durable PostgreSQL persistence.
 // ============================================================
 
 import { getAuthenticatedUser } from "@/lib/api/auth";
-import { apiError, apiSuccess } from "@/lib/api/response";
-import { store } from "@/lib/services/store";
-import { updateTaskStatus } from "@/lib/services/task-service";
-import { TaskStatus } from "@/lib/logic/types";
+import { apiError, apiSuccess, safeCatchError } from "@/lib/api/response";
+import { taskRepository } from "@/lib/repositories/task-repository";
+import { Difficulty, TaskStatus } from "@/lib/logic/types";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -22,15 +24,14 @@ export async function GET(req: Request, { params }: RouteParams) {
     }
 
     const { id } = await params;
-    const task = store.tasks.get(id);
-    if (!task || task.userId !== user.id) {
+    const task = await taskRepository.findById(user.id, id);
+    if (!task) {
       return apiError("NOT_FOUND", "Task not found", 404);
     }
 
     return apiSuccess(task);
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Failed to fetch task";
-    return apiError("INTERNAL_ERROR", message, 500);
+  } catch (err) {
+    return safeCatchError(err);
   }
 }
 
@@ -42,8 +43,8 @@ export async function PATCH(req: Request, { params }: RouteParams) {
     }
 
     const { id } = await params;
-    const task = store.tasks.get(id);
-    if (!task || task.userId !== user.id) {
+    const task = await taskRepository.findById(user.id, id);
+    if (!task) {
       return apiError("NOT_FOUND", "Task not found", 404);
     }
 
@@ -53,33 +54,74 @@ export async function PATCH(req: Request, { params }: RouteParams) {
       task.status === TaskStatus.CANCELLED ||
       task.status === TaskStatus.EXPIRED
     ) {
-      return apiError("INVALID_STATE", `Cannot update task in terminal state (${task.status})`, 400);
+      return apiError(
+        "INVALID_STATE",
+        `Cannot update task in terminal state (${task.status})`,
+        400
+      );
     }
 
     const body = await req.json().catch(() => ({}));
 
-    // If status transition requested
-    if (body.status && body.status !== task.status) {
-      const targetStatus = body.status as TaskStatus;
-      updateTaskStatus(id, targetStatus);
+    // Immutability after start: difficulty and estimated duration cannot be modified once IN_PROGRESS
+    if (task.status !== TaskStatus.PENDING) {
+      if (
+        (body.difficulty && body.difficulty !== task.difficulty) ||
+        (body.estimatedMinutes !== undefined &&
+          Number(body.estimatedMinutes) !== task.estimatedMinutes)
+      ) {
+        return apiError(
+          "IMMUTABLE_FIELD",
+          "Reward-relevant fields (difficulty, estimated duration) become immutable once a task is started",
+          400
+        );
+      }
     }
 
-    // Update allowable metadata fields
-    const updated = store.tasks.get(id)!;
+    const updates: {
+      title?: string;
+      description?: string | null;
+      difficulty?: Difficulty;
+      estimatedMinutes?: number;
+      status?: TaskStatus;
+      dueAt?: Date | null;
+    } = {};
+
     if (typeof body.title === "string" && body.title.trim()) {
-      updated.title = body.title.trim();
+      updates.title = body.title.trim();
     }
     if (body.description !== undefined) {
-      updated.description = body.description ? String(body.description).trim() : null;
+      updates.description = body.description
+        ? String(body.description).trim()
+        : null;
+    }
+    if (body.difficulty && task.status === TaskStatus.PENDING) {
+      updates.difficulty = body.difficulty.toUpperCase() as Difficulty;
+    }
+    if (body.estimatedMinutes !== undefined && task.status === TaskStatus.PENDING) {
+      updates.estimatedMinutes = Number(body.estimatedMinutes);
     }
     if (body.dueAt !== undefined) {
-      updated.dueAt = body.dueAt ? new Date(body.dueAt) : null;
+      updates.dueAt = body.dueAt ? new Date(body.dueAt) : null;
     }
-    store.tasks.set(id, updated);
+    if (body.status && body.status !== task.status) {
+      updates.status = body.status as TaskStatus;
+    }
+
+    const updated = await taskRepository.updateTask(user.id, id, updates);
+    if (!updated) {
+      return apiError("NOT_FOUND", "Task not found", 404);
+    }
 
     return apiSuccess(updated);
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Failed to update task";
-    return apiError("BAD_REQUEST", message, 400);
+    const error = err as Error;
+    if (
+      error?.message?.includes("cannot be modified") ||
+      error?.message?.includes("immutable")
+    ) {
+      return apiError("IMMUTABLE_FIELD", error.message, 400);
+    }
+    return safeCatchError(err);
   }
 }

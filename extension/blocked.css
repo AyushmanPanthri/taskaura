@@ -1,0 +1,155 @@
+/* ============================================================
+   TaskAura Focus Guard — Blocked Page Styles
+   Dark glassmorphism theme consistent with TaskAura branding
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-deep:    #0d0f1a;
+  --bg-card:    rgba(255,255,255,0.04);
+  --border:     rgba(255,255,255,0.08);
+  --accent:     #7c6aff;
+  --accent-2:   #a78bfa;
+  --text-prime: #f0f0f8;
+  --text-muted: #8b8fa8;
+  --warn:       #f59e0b;
+  --radius:     1.25rem;
+  --shadow:     0 24px 80px rgba(0,0,0,0.6), 0 8px 24px rgba(0,0,0,0.4);
+}
+
+html, body {
+  min-height: 100vh;
+  background: var(--bg-deep);
+  font-family: 'Inter', system-ui, sans-serif;
+  color: var(--text-prime);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(124,106,255,0.18) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.container {
+  max-width: 540px;
+  width: 90%;
+  padding: 2rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* Main card */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 2.5rem 2rem;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(16px);
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+  animation: fadeUp 0.4s ease;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Header */
+.header { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 0.75rem; }
+
+.icon-wrap {
+  width: 64px; height: 64px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 32px rgba(124,106,255,0.35);
+}
+.shield-icon { width: 32px; height: 32px; color: #fff; }
+
+.title {
+  font-size: 1.6rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--accent-2), #c4b5fd);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1.2;
+}
+
+.subtitle { color: var(--text-muted); font-size: 0.95rem; }
+
+/* Session card */
+.session-card {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.session-row { display: flex; justify-content: space-between; align-items: center; }
+.label { font-size: 0.85rem; color: var(--text-muted); font-weight: 500; }
+.value { font-size: 0.95rem; font-weight: 600; color: var(--text-prime); }
+.value.accent { color: var(--accent-2); }
+
+/* Live timer */
+.timer {
+  text-align: center;
+  font-size: 3.5rem;
+  font-weight: 700;
+  letter-spacing: -2px;
+  background: linear-gradient(135deg, #fff 30%, var(--accent-2));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-feature-settings: 'tnum';
+}
+
+/* Bypass section */
+.bypass-section { display: flex; flex-direction: column; gap: 0.75rem; align-items: center; }
+
+.bypass-hint {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.5;
+}
+
+.bypass-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 0.625rem;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.875rem;
+  padding: 0.5rem 1.25rem;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+.bypass-btn:hover { border-color: var(--accent); color: var(--accent-2); }
+
+/* Disclosure footer */
+.disclosure {
+  background: rgba(245,158,11,0.07);
+  border: 1px solid rgba(245,158,11,0.2);
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+  font-size: 0.78rem;
+  color: var(--warn);
+  line-height: 1.6;
+  animation: fadeUp 0.5s 0.1s ease both;
+}
+.disclosure strong { font-weight: 600; }

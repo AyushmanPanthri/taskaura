@@ -48,6 +48,136 @@ export const ECONOMY = {
   taskDefaultMinutes: 30,
 } as const;
 
+/**
+ * Authoritative Anti-Farming & Completion Integrity Configuration.
+ * Centralized policy limits and initial tunable defaults.
+ */
+export const ANTI_FARMING_CONFIG = {
+  /** Minimum completion threshold: 80% of estimated duration. */
+  minCompletionShareOfEstimated: 0.8,
+  /** Absolute minimum duration (ms) for any XP-eligible task (60 seconds). */
+  minAbsoluteDurationMs: 60_000,
+  /** Minimum estimated minutes required for user-selected HARD difficulty. */
+  hardMinMinutes: 45,
+  /** Minimum estimated minutes required for user-selected EPIC difficulty. */
+  epicMinMinutes: 90,
+
+  /** Max tasks a user may create per calendar day. */
+  dailyTasksCreatedLimit: 20,
+  /** Max successful task completions awarded XP per calendar day. */
+  dailyTasksCompletedLimit: 15,
+  /** Max total completion attempts (successful + rejected) per calendar day. */
+  dailyCompletionAttemptsLimit: 30,
+  /** Daily cap on total XP earned specifically from tasks. */
+  dailyTaskXpCap: 1000,
+
+  /** New-user onboarding progression ramp-up: first N lifetime SELF_CONFIRMED tasks. */
+  newUserRampUpTaskCount: 5,
+  /** Multiplier applied to raw XP during onboarding ramp-up (50%). */
+  newUserRampUpMultiplier: 0.5,
+
+  // ── Suspicious Pattern Thresholds ──────────────────────────────
+  // INITIAL DEFAULTS subject to tuning after real usage data exists:
+
+  /** Burst threshold: >= 5 completions in burst window. Starting guess for automated batch check-offs. */
+  suspiciousBurstCount: 5,
+  /** Burst window: 10 minutes in milliseconds. */
+  suspiciousBurstWindowMs: 10 * 60_000,
+  /** Rejection threshold: >= 3 speed/eligibility rejections in 24h. Starting guess for timing brute-force attempts. */
+  suspiciousRejectedAttemptsThreshold: 3,
+  /** Abandoned threshold: >= 3 abandoned/cancelled HARD/EPIC tasks in 24h. Starting guess for multiplier probing. */
+  suspiciousAbandonHardEpicCount: 3,
+  /** Baseline velocity ratio: > 3.0x trailing 7-day daily average. Starting guess for abnormal volume spikes. */
+  suspiciousDailyBaselineMultiplier: 3.0,
+  /** Minimum daily completion floor before baseline velocity ratio can trigger (protects casual variance). */
+  suspiciousDailyBaselineMinFloor: 10,
+} as const;
+
+/**
+ * Authoritative calculation of minimum required duration before a task
+ * is eligible for completion and XP reward.
+ *
+ * Formula: max(60,000 ms, floor(estimatedMinutes * 60,000 * 0.8))
+ *
+ * Rounding behavior:
+ * - Computed in integer milliseconds.
+ * - Fractional milliseconds are floored (Math.floor).
+ * - Clamped at configured lower bound (60,000 ms).
+ * - Tasks with estimated duration < 60s (e.g. < 1 min) require 60,000 ms,
+ *   but earn 0 XP per anti-farming rules.
+ *
+ * Authoritative examples:
+ *   5 min task  -> max(60s, floor(5 * 60 * 0.8)s)  = max(60s, 240s)  = 4 min (240,000 ms)
+ *  15 min task  -> max(60s, floor(15 * 60 * 0.8)s) = max(60s, 720s) = 12 min (720,000 ms)
+ *  30 min task  -> max(60s, floor(30 * 60 * 0.8)s) = max(60s, 1440s) = 24 min (1,440,000 ms)
+ *  60 min task  -> max(60s, floor(60 * 60 * 0.8)s) = max(60s, 2880s) = 48 min (2,880,000 ms)
+ */
+export function calculateMinimumDurationMs(estimatedMinutes: number): number {
+  const estimatedMs = Math.max(0, estimatedMinutes) * 60_000;
+  const rawShare = Math.floor(estimatedMs * ANTI_FARMING_CONFIG.minCompletionShareOfEstimated);
+  return Math.max(ANTI_FARMING_CONFIG.minAbsoluteDurationMs, rawShare);
+}
+
+export interface AuthoritativeTaskRewardOptions {
+  minutes: number;
+  difficulty: string;
+  verification: VerificationKind;
+  isGrandfathered?: boolean;
+  lifetimeSelfConfirmedCount?: number;
+}
+
+export interface AuthoritativeTaskRewardResult {
+  rawXp: number;
+  finalXp: number;
+  isReducedNewUser: boolean;
+  zeroReason?: "SUB_60_SECONDS" | "NEVER_STARTED" | "TOO_FAST";
+}
+
+/**
+ * Authoritative calculation of task XP reward enforcing:
+ * 1. Sub-60 second tasks earn 0 XP
+ * 2. Minimum duration threshold enforcement
+ * 3. HARD (>=45m) and EPIC (>=90m) difficulty constraints (with legacy grandfathering support)
+ * 4. First-five lifetime SELF_CONFIRMED task onboarding ramp-up (50% XP, floor 1)
+ */
+export function calculateTaskRewardAuthoritative(
+  options: AuthoritativeTaskRewardOptions
+): AuthoritativeTaskRewardResult {
+  // Sub-60s tasks receive 0 XP
+  if (options.minutes < 1) {
+    return { rawXp: 0, finalXp: 0, isReducedNewUser: false, zeroReason: "SUB_60_SECONDS" };
+  }
+
+  const effectiveDifficulty = options.isGrandfathered
+    ? toDifficultyName(options.difficulty)
+    : clampDifficulty(options.difficulty, options.minutes);
+
+  const raw = computeRawXp({
+    kind: "TASK",
+    minutes: options.minutes,
+    difficulty: effectiveDifficulty,
+    verification: options.verification,
+  }).raw;
+
+  let finalXp = raw;
+  let isReducedNewUser = false;
+
+  // First-five lifetime self-confirmed task rule:
+  // A brand-new user's first 5 SELF_CONFIRMED task completions pay 50% of the
+  // normally-calculated reward, rounded down, with a floor of 1 XP if raw > 0.
+  // FOCUS_VERIFIED completions are exempt from this cap regardless of count.
+  if (
+    options.verification === "SELF_CONFIRMED" &&
+    options.lifetimeSelfConfirmedCount !== undefined &&
+    options.lifetimeSelfConfirmedCount < ANTI_FARMING_CONFIG.newUserRampUpTaskCount
+  ) {
+    finalXp = Math.max(1, Math.floor(raw * ANTI_FARMING_CONFIG.newUserRampUpMultiplier));
+    isReducedNewUser = true;
+  }
+
+  return { rawXp: raw, finalXp, isReducedNewUser };
+}
+
 // ── Levels ───────────────────────────────────────────────────
 // xp_to_next(L)  = 100 × (L + 2)
 // cumulative(L)  = 50 × (L − 1) × (L + 4)
@@ -70,13 +200,13 @@ export function xpToNext(level: number): number {
  * Level for a given total XP. Negative totals (possible after reversals)
  * are treated as 0 so a level never drops below 1.
  */
-export function levelFor(totalXp: number): number {
+export function levelFor(totalXp: number, maxLevel?: number): number {
   const xp = Math.max(0, Math.floor(totalXp));
   let level = Math.max(1, Math.floor((-3 + Math.sqrt(25 + xp / 12.5)) / 2));
   // Guard against floating-point error at exact boundaries.
   while (cumulativeXp(level + 1) <= xp) level++;
   while (level > 1 && cumulativeXp(level) > xp) level--;
-  return level;
+  return maxLevel !== undefined ? Math.min(maxLevel, level) : level;
 }
 
 export interface LevelConfigEntry {
@@ -86,7 +216,7 @@ export interface LevelConfigEntry {
   title?: string;
 }
 
-const LEVEL_TITLES: Record<number, string> = {
+export const LEVEL_TITLES: Record<number, string> = {
   1: "Novice",
   5: "Apprentice",
   10: "Adept",
@@ -110,6 +240,21 @@ const LEVEL_TITLES: Record<number, string> = {
   100: "Zenith",
 };
 
+/**
+ * Returns the highest unlocked RPG mastery title for the given level.
+ * Persists milestone title across intermediate levels (e.g. level 6-9 retain "Apprentice").
+ */
+export function getLegacyLevelTitle(level: number): string {
+  const clamped = Math.min(100, Math.max(1, Math.floor(level)));
+  const milestones = [1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100];
+  let activeMilestone = 1;
+  for (const m of milestones) {
+    if (clamped >= m) activeMilestone = m;
+    else break;
+  }
+  return LEVEL_TITLES[activeMilestone] ?? "Novice";
+}
+
 /** Pre-generated authoritative level configuration for levels 1–100 (data-only). */
 export const LEVEL_CONFIG: LevelConfigEntry[] = Array.from({ length: 100 }, (_, i) => {
   const level = i + 1;
@@ -129,12 +274,19 @@ export interface LevelProgress {
   fraction: number;
 }
 
-export function levelProgress(totalXp: number): LevelProgress {
+export function levelProgress(totalXp: number, maxLevel?: number): LevelProgress {
   const xp = Math.max(0, Math.floor(totalXp));
-  const level = levelFor(xp);
-  const into = xp - cumulativeXp(level);
-  const next = xpToNext(level);
-  return { level, xpIntoLevel: into, xpToNext: next, fraction: into / next };
+  const rawLevel = levelFor(xp);
+
+  // At or above configured max level (e.g. level 100): progress bar is full, xpToNext is 0
+  if (maxLevel !== undefined && rawLevel >= maxLevel) {
+    const into = xp - cumulativeXp(maxLevel);
+    return { level: maxLevel, xpIntoLevel: into, xpToNext: 0, fraction: 1.0 };
+  }
+
+  const into = xp - cumulativeXp(rawLevel);
+  const next = xpToNext(rawLevel);
+  return { level: rawLevel, xpIntoLevel: into, xpToNext: next, fraction: into / next };
 }
 
 // ── Rounding Policy ──────────────────────────────────────────
@@ -399,3 +551,12 @@ export function localDateString(date: Date, timeZone: string = "UTC"): string {
     return date.toISOString().slice(0, 10);
   }
 }
+
+// ── Rank Title System (Phase 2 Addendum) ─────────────────────
+export {
+  RANK_TIERS,
+  getRankTitle,
+  getRankTitleInfo,
+  type RankTier,
+  type RankTitleInfo,
+} from "./rank-titles";

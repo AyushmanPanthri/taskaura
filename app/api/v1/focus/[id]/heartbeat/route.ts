@@ -1,12 +1,14 @@
 // ============================================================
 // Task Aura — POST /api/v1/focus/:id/heartbeat
 // Records active heartbeat during focus session
+//
+// MIGRATION (Stage 3): Previously read/wrote InMemoryStore.
+// Now uses focusRepository (Prisma) for durable PostgreSQL updates.
 // ============================================================
 
 import { getAuthenticatedUser } from "@/lib/api/auth";
-import { apiError, apiSuccess } from "@/lib/api/response";
-import { store } from "@/lib/services/store";
-import { recordHeartbeat } from "@/lib/services/focus-service";
+import { apiError, apiSuccess, safeCatchError } from "@/lib/api/response";
+import { focusRepository } from "@/lib/repositories/focus-repository";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -20,15 +22,19 @@ export async function POST(req: Request, { params }: RouteParams) {
     }
 
     const { id } = await params;
-    const session = store.focusSessions.get(id);
-    if (!session || session.userId !== user.id) {
-      return apiError("NOT_FOUND", "Focus session not found", 404);
-    }
 
-    const updated = recordHeartbeat(id);
-    return apiSuccess(updated);
+    const result = await focusRepository.recordHeartbeat(user.id, id);
+
+    return apiSuccess({
+      heartbeatCount: result.heartbeatCount,
+      status: result.status,
+    });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Failed to record heartbeat";
-    return apiError("BAD_REQUEST", message, 400);
+    const message =
+      err instanceof Error ? err.message : "Failed to record heartbeat";
+    if (message.includes("not found")) {
+      return apiError("NOT_FOUND", message, 404);
+    }
+    return safeCatchError(err);
   }
 }

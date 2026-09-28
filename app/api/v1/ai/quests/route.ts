@@ -1,14 +1,17 @@
 // ============================================================
 // Task Aura — POST /api/v1/ai/quests
 // Proposes and registers an AI Quest task (no immediate XP)
+//
+// MIGRATION (Stage 4): Migrated from InMemoryStore to PostgreSQL.
+// Quest task is persisted directly via taskRepository.
 // ============================================================
 
 import { getAuthenticatedUser } from "@/lib/api/auth";
 import { apiError, apiSuccess } from "@/lib/api/response";
-import { store } from "@/lib/services/store";
-import { createTask } from "@/lib/services/task-service";
-import { buildAIContext, validateAIAction } from "@/lib/logic/ai-rules";
+import { taskRepository } from "@/lib/repositories/task-repository";
+import { validateAIAction } from "@/lib/logic/ai-rules";
 import { AIAction, Difficulty, GoalStatus, TaskSource } from "@/lib/logic/types";
+import { getPostgresAIContext } from "@/lib/services/ai-service";
 
 export async function POST(req: Request) {
   try {
@@ -17,13 +20,7 @@ export async function POST(req: Request) {
       return apiError("UNAUTHORIZED", "Authentication required", 401);
     }
 
-    const metrics = store.getUserDailyMetrics(user.id);
-    const goals = store.getUserGoals(user.id);
-    const tasks = store.getUserTasks(user.id);
-    const totalXp = store.getTotalXp(user.id);
-    const streak = store.streakRecords.get(user.id)?.currentStreak ?? 0;
-
-    const context = buildAIContext(metrics, goals, tasks, totalXp, streak);
+    const { context, goals } = await getPostgresAIContext(user.id);
 
     // Validate quest generation readiness (§14, §17: active goals & data maturity)
     const validation = validateAIAction(AIAction.QUEST, context);
@@ -35,12 +32,10 @@ export async function POST(req: Request) {
     const goalTitle = primaryGoal ? primaryGoal.title : "Productivity Mastery";
 
     // Propose quest task
-    const questTask = createTask({
-      userId: user.id,
+    const questTask = await taskRepository.createTask(user.id, {
       title: `Quest: Deep Practice — ${goalTitle}`,
       description: `Targeted 45-minute focused preparation aligned with your goal: ${goalTitle}.`,
       difficulty: Difficulty.HARD,
-      estimatedMinutes: 45,
       source: TaskSource.AI,
     });
 

@@ -1,12 +1,14 @@
 // ============================================================
 // Task Aura — GET /api/v1/ai/insights
 // Deterministic rule-based insights (zero XP mutation)
+//
+// MIGRATION (Stage 4): Migrated from InMemoryStore to PostgreSQL.
 // ============================================================
 
 import { getAuthenticatedUser } from "@/lib/api/auth";
 import { apiError, apiSuccess } from "@/lib/api/response";
-import { store } from "@/lib/services/store";
-import { buildAIContext, evaluateRules, getFallbackTip } from "@/lib/logic/ai-rules";
+import { evaluateRules, getFallbackTip } from "@/lib/logic/ai-rules";
+import { getPostgresAIContext } from "@/lib/services/ai-service";
 
 export async function GET(req: Request) {
   try {
@@ -15,13 +17,7 @@ export async function GET(req: Request) {
       return apiError("UNAUTHORIZED", "Authentication required", 401);
     }
 
-    const metrics = store.getUserDailyMetrics(user.id);
-    const goals = store.getUserGoals(user.id);
-    const tasks = store.getUserTasks(user.id);
-    const totalXp = store.getTotalXp(user.id);
-    const streak = store.streakRecords.get(user.id)?.currentStreak ?? 0;
-
-    const context = buildAIContext(metrics, goals, tasks, totalXp, streak);
+    const { context } = await getPostgresAIContext(user.id);
     const rules = evaluateRules(context);
 
     // Find any fired insight or recommendation

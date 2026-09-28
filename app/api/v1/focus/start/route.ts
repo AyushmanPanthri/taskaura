@@ -1,11 +1,13 @@
 // ============================================================
 // Task Aura — POST /api/v1/focus/start
-// Starts a new focus session (enforces single running session)
+// Starts a new focus session (enforces single running session via PostgreSQL)
+//
+// MIGRATION (Stage 3): Migrated from InMemoryStore to focusRepository (PostgreSQL).
 // ============================================================
 
 import { getAuthenticatedUser } from "@/lib/api/auth";
 import { apiError, apiSuccess } from "@/lib/api/response";
-import { startFocusSession } from "@/lib/services/focus-service";
+import { focusRepository } from "@/lib/repositories/focus-repository";
 
 export async function POST(req: Request) {
   try {
@@ -19,13 +21,12 @@ export async function POST(req: Request) {
     const clientEventId = typeof body.clientEventId === "string" && body.clientEventId.trim()
       ? body.clientEventId.trim()
       : crypto.randomUUID();
-    const taskId = typeof body.taskId === "string" && body.taskId.trim() ? body.taskId.trim() : undefined;
+    const expectedHeartbeats = Math.floor((requiredMinutes * 60) / 30);
 
-    const session = startFocusSession({
-      userId: user.id,
+    const session = await focusRepository.startSession(user.id, {
       requiredMinutes,
       clientEventId,
-      taskId,
+      expectedHeartbeats,
     });
 
     return apiSuccess(session, 201);

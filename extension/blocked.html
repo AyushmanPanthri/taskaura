@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Focus Session Active — TaskAura</title>
+  <link rel="stylesheet" href="blocked.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <!-- Header -->
+      <div class="header">
+        <div class="icon-wrap">
+          <svg class="shield-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+        </div>
+        <h1 class="title">Focus Session Active</h1>
+        <p class="subtitle">You blocked this site to stay focused.</p>
+      </div>
+
+      <!-- Session info -->
+      <div class="session-card">
+        <div class="session-row">
+          <span class="label">Blocked site</span>
+          <span class="value" id="blocked-domain">—</span>
+        </div>
+        <div class="session-row">
+          <span class="label">Remaining</span>
+          <span class="value accent" id="remaining-time">—</span>
+        </div>
+        <div class="session-row">
+          <span class="label">Elapsed</span>
+          <span class="value" id="elapsed-time">—</span>
+        </div>
+      </div>
+
+      <!-- Timer display -->
+      <div class="timer" id="live-timer">—:—</div>
+
+      <!-- Bypass warning -->
+      <div class="bypass-section">
+        <p class="bypass-hint">
+          You can disable this extension at any time — but you set this goal for yourself.
+        </p>
+        <button class="bypass-btn" id="go-back-btn">← Go back</button>
+      </div>
+    </div>
+
+    <!-- Honest disclosure -->
+    <div class="disclosure">
+      <p>
+        <strong>What this tool does not guarantee:</strong>
+        This extension cannot prevent you from visiting blocked sites in another browser, device, or incognito window.
+        Your focus session XP is earned entirely server-side based on elapsed time — not by whether you visited a blocked site.
+        This is a commitment aid, not a technical lock.
+      </p>
+    </div>
+  </div>
+
+  <script src="blocked.js"></script>
+</body>
+</html>

@@ -3,9 +3,10 @@ import { prisma } from "../prisma";
 import { FocusSession, FocusSessionStatus } from "../logic/types";
 
 export interface StartFocusInput {
-  requiredMinutes: number;
+  requiredMinutes?: number;
+  targetDurationMinutes?: number;
   clientEventId: string;
-  expectedHeartbeats: number;
+  expectedHeartbeats?: number;
 }
 
 export interface FocusPayoutData {
@@ -84,7 +85,7 @@ export class FocusRepository {
   async startSession(userId: string, input: StartFocusInput): Promise<FocusSession> {
     return prisma.$transaction(async (tx) => {
       // 0. Serialize concurrent focus starts for the user using SELECT FOR UPDATE
-      await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE;`;
+      await tx.$queryRaw`SELECT id FROM "users" WHERE id = ${userId}::uuid FOR UPDATE;`;
 
       // 1. Check for any currently running session for this user
       const active = await tx.focusSession.findFirst({
@@ -119,12 +120,13 @@ export class FocusRepository {
       }
 
       const now = new Date();
+      const minutes = input.requiredMinutes ?? input.targetDurationMinutes ?? 25;
       const created = await tx.focusSession.create({
         data: {
           userId,
           clientEventId: input.clientEventId,
-          requiredMinutes: input.requiredMinutes,
-          expectedHeartbeats: input.expectedHeartbeats,
+          requiredMinutes: minutes,
+          expectedHeartbeats: input.expectedHeartbeats ?? Math.floor(minutes * 2),
           status: FocusSessionStatus.RUNNING,
           startedAt: now,
           lastHeartbeatAt: now,

@@ -39,18 +39,20 @@ model User {
   xpTransactions   XPTransaction[]
   userAchievements UserAchievement[]
   quests           Quest[]
+  questAssignments QuestAssignment[]
   aiInsights       AIInsight[]
   weeklyScores     WeeklyScore[]
   syncLogs         SyncLog[]
-  streakRecord     StreakRecord?
+  streakRecord        StreakRecord?
+  blocklistedDomains  BlocklistedDomain[]
 
   @@index([email])
   @@map("users")
 }
 
 model Account {
-  id                String  @id @default(uuid())
-  userId            String
+  id                String  @id @default(uuid()) @db.Uuid
+  userId            String  @db.Uuid
   type              String  @default("oauth")
   provider          String
   providerAccountId String
@@ -83,8 +85,8 @@ model Session {
 }
 
 model UserSettings {
-  id                  String  @id @default(uuid())
-  userId              String  @unique
+  id                  String  @id @default(uuid()) @db.Uuid
+  userId              String  @unique @db.Uuid
   dailyGoalXp         Int     @default(500)
   weekdayWeekendSplit Boolean @default(false)
   retentionDays       Int     @default(90)
@@ -93,9 +95,9 @@ model UserSettings {
 }
 
 model UsageSession {
-  id              String   @id @default(uuid())
+  id              String   @id @default(uuid()) @db.Uuid
   clientEventId   String   @unique // §3 v2: dedup key
-  userId          String
+  userId          String   @db.Uuid
   packageName     String
   appName         String
   startTime       DateTime
@@ -112,8 +114,8 @@ model UsageSession {
 }
 
 model Goal {
-  id           String   @id @default(uuid())
-  userId       String
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @db.Uuid
   title        String
   description  String?
   category     String?
@@ -128,17 +130,20 @@ model Goal {
 }
 
 model Task {
-  id          String    @id @default(uuid())
-  userId      String
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @db.Uuid
   title       String
   description String?
   difficulty  String    @default("NORMAL")
-  status      String    @default("PENDING")
-  dueAt       DateTime?
-  completedAt DateTime?
-  source      String    @default("USER")
-  questId     String?
-  createdAt   DateTime  @default(now())
+  status             String    @default("PENDING")
+  startedAt          DateTime?
+  completedAt        DateTime?
+  estimatedMinutes   Int       @default(30)
+  completionAttempts Int       @default(0)
+  dueAt              DateTime?
+  source             String    @default("USER")
+  questId            String?
+  createdAt          DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -146,8 +151,8 @@ model Task {
 }
 
 model Habit {
-  id            String    @id @default(uuid())
-  userId        String
+  id            String    @id @default(uuid()) @db.Uuid
+  userId        String    @db.Uuid
   title         String
   frequency     String    @default("DAILY")
   streakCurrent Int       @default(0)
@@ -161,8 +166,8 @@ model Habit {
 }
 
 model HabitLog {
-  id        String  @id @default(uuid())
-  habitId   String
+  id        String  @id @default(uuid()) @db.Uuid
+  habitId   String  @db.Uuid
   date      String  // YYYY-MM-DD
   completed Boolean
 
@@ -173,8 +178,8 @@ model HabitLog {
 }
 
 model DailyMetrics {
-  id                 String @id @default(uuid())
-  userId             String
+  id                 String @id @default(uuid()) @db.Uuid
+  userId             String @db.Uuid
   date               String // YYYY-MM-DD
   totalScreenTime    Int    @default(0)  // seconds
   appOpens           Int    @default(0)
@@ -195,9 +200,9 @@ model DailyMetrics {
 }
 
 model FocusSession {
-  id                 String    @id @default(uuid())
+  id                 String    @id @default(uuid()) @db.Uuid
   clientEventId      String    @unique // dedup key
-  userId             String
+  userId             String    @db.Uuid
   status             String    @default("RUNNING")
   startedAt          DateTime  @default(now())
   completedAt        DateTime?
@@ -213,8 +218,8 @@ model FocusSession {
 }
 
 model XPTransaction {
-  id                   String   @id @default(uuid())
-  userId               String
+  id                   String   @id @default(uuid()) @db.Uuid
+  userId               String   @db.Uuid
   amount               Int
   sourceType           String
   sourceId             String
@@ -227,12 +232,12 @@ model XPTransaction {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, idempotencyKey]) // §9.4 / §15: CONSTRAINT uq_xp_idem UNIQUE (user_id, idempotency_key)
+  @@unique([userId, idempotencyKey])
   @@index([userId, createdAt])
 }
 
 model Achievement {
-  id          String @id @default(uuid())
+  id          String @id @default(uuid()) @db.Uuid
   name        String
   description String
   ruleVersion Int    @default(1)
@@ -242,37 +247,71 @@ model Achievement {
 }
 
 model UserAchievement {
-  id            String   @id @default(uuid())
-  userId        String
-  achievementId String
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @db.Uuid
+  achievementId String   @db.Uuid
   unlockedAt    DateTime @default(now())
 
   user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, achievementId]) // §13 v2: one unlock per achievement
+  @@unique([userId, achievementId])
   @@index([userId])
 }
 
 model Quest {
-  id             String   @id @default(uuid())
-  userId         String
+  id             String    @id @default(uuid()) @db.Uuid
+  userId         String    @db.Uuid
   title          String
   description    String
-  difficulty     String   @default("NORMAL")
-  status         String   @default("ACTIVE")
-  triggeringRule String   // AIRuleId
-  sourceMetrics  String   // JSON
-  createdAt      DateTime @default(now())
+  difficulty     String    @default("NORMAL")
+  status         String    @default("ACTIVE")
+  triggeringRule String    @default("ADMIN_CREATED") // AIRuleId | ADMIN_CREATED
+  sourceMetrics  String    @default("{}") // JSON
+  createdAt      DateTime  @default(now())
+  // Admin-forge extensions (nullable — backward-compatible with existing AI quests)
+  xpReward       Int?      // XP awarded on completion
+  deadline       DateTime? // optional quest deadline
+  targetType     String?   @default("PERSONAL") // PERSONAL | SPECIFIC | GLOBAL
+  createdByAdmin String?   @db.Uuid // adminUserId if forged by admin
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questAssignments QuestAssignment[]
 
   @@index([userId, status])
+  @@index([targetType, status])
+}
+
+model QuestAssignment {
+  id         String   @id @default(uuid()) @db.Uuid
+  questId    String   @db.Uuid
+  userId     String   @db.Uuid
+  assignedAt DateTime @default(now())
+
+  quest Quest @relation(fields: [questId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([questId, userId])
+  @@index([userId])
+  @@index([questId])
+}
+
+model AdminAuditLog {
+  id            String   @id @default(uuid()) @db.Uuid
+  adminUserId   String   @db.Uuid
+  action        String   // QUEST_CREATED | QUEST_UPDATED | QUEST_ASSIGNED | XP_GRANTED | ACHIEVEMENT_GRANTED
+  targetUserId  String?  @db.Uuid
+  targetQuestId String?  @db.Uuid
+  metadata      String   @default("{}") // JSON — NEVER contains passwords, hashes, or tokens
+  createdAt     DateTime @default(now())
+
+  @@index([adminUserId, createdAt])
+  @@index([createdAt])
 }
 
 model AIInsight {
-  id                String   @id @default(uuid())
-  userId            String
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @db.Uuid
   type              String   // insight | recommendation | quest
   content           String
   sourceMetricsJson String   // JSON: triggering metrics
@@ -284,8 +323,8 @@ model AIInsight {
 }
 
 model WeeklyScore {
-  id         String   @id @default(uuid())
-  userId     String
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
   weekStart  String   // YYYY-MM-DD
   weekEnd    String   // YYYY-MM-DD
   totalXp    Int      @default(0)
@@ -299,15 +338,15 @@ model WeeklyScore {
 }
 
 model TaskTypeConfig {
-  id     String  @id @default(uuid())
+  id     String  @id @default(uuid()) @db.Uuid
   type   String  @unique
   baseXp Int
   active Boolean @default(true)
 }
 
 model SyncLog {
-  id            String   @id @default(uuid())
-  userId        String
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @db.Uuid
   clientEventId String
   receivedAt    DateTime @default(now())
   status        String
@@ -318,12 +357,29 @@ model SyncLog {
 }
 
 model StreakRecord {
-  id                String  @id @default(uuid())
-  userId            String  @unique
+  id                String  @id @default(uuid()) @db.Uuid
+  userId            String  @unique @db.Uuid
   currentStreak     Int     @default(0)
   bestStreak        Int     @default(0)
   lastEligibleDate  String? // YYYY-MM-DD
   graceUsedThisWeek Boolean @default(false)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ── Extension: Site-Blocking Focus Enforcement ───────────────
+// Stores user-configured distraction domains blocked during focus sessions.
+// Managed via /api/v1/extension/blocklist (GET/POST/DELETE).
+// Queried by the browser extension background service worker on each poll.
+model BlocklistedDomain {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  domain    String   @db.VarChar(255)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, domain])
+  @@index([userId])
+  @@map("blocklisted_domains")
 }

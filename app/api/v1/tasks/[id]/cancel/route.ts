@@ -1,12 +1,14 @@
 // ============================================================
 // Task Aura — POST /api/v1/tasks/:id/cancel
 // Terminal cancellation for tasks
+//
+// MIGRATION (Stage 3): Previously read/wrote to InMemoryStore.
+// Now uses taskRepository (Prisma) for durable PostgreSQL persistence.
 // ============================================================
 
 import { getAuthenticatedUser } from "@/lib/api/auth";
-import { apiError, apiSuccess } from "@/lib/api/response";
-import { store } from "@/lib/services/store";
-import { updateTaskStatus } from "@/lib/services/task-service";
+import { apiError, apiSuccess, safeCatchError } from "@/lib/api/response";
+import { taskRepository } from "@/lib/repositories/task-repository";
 import { TaskStatus } from "@/lib/logic/types";
 
 interface RouteParams {
@@ -21,15 +23,29 @@ export async function POST(req: Request, { params }: RouteParams) {
     }
 
     const { id } = await params;
-    const task = store.tasks.get(id);
-    if (!task || task.userId !== user.id) {
+    const task = await taskRepository.findById(user.id, id);
+    if (!task) {
       return apiError("NOT_FOUND", "Task not found", 404);
     }
 
-    const updatedTask = updateTaskStatus(id, TaskStatus.CANCELLED);
-    return apiSuccess(updatedTask);
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Failed to cancel task";
-    return apiError("BAD_REQUEST", message, 400);
+    if (
+      task.status === TaskStatus.COMPLETED ||
+      task.status === TaskStatus.CANCELLED ||
+      task.status === TaskStatus.EXPIRED
+    ) {
+      return apiError(
+        "INVALID_STATE",
+        `Cannot cancel task in terminal state (${task.status})`,
+        400
+      );
+    }
+
+    const updated = await taskRepository.updateTask(user.id, id, {
+      status: TaskStatus.CANCELLED,
+    });
+
+    return apiSuccess(updated);
+  } catch (err) {
+    return safeCatchError(err);
   }
 }

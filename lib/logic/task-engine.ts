@@ -79,3 +79,63 @@ export function getAllowedTransitions(
 ): TaskStatus[] {
   return VALID_TRANSITIONS[currentStatus] ?? [];
 }
+
+/**
+ * Enforce reward-relevant field immutability:
+ * Difficulty, estimated duration, and source cannot be changed once
+ * a task enters IN_PROGRESS or is in a terminal state.
+ */
+export function canModifyRewardFields(status: TaskStatus): boolean {
+  return status === TaskStatus.PENDING;
+}
+
+/**
+ * Validate whether a task mutation attempts to alter reward-critical
+ * fields after work has commenced.
+ */
+export function validateRewardFieldImmutability(
+  currentTask: { status: TaskStatus; difficulty: string; estimatedMinutes?: number | null },
+  updates: { difficulty?: string; estimatedMinutes?: number | null }
+): { allowed: boolean; reason?: string } {
+  if (canModifyRewardFields(currentTask.status)) {
+    return { allowed: true };
+  }
+
+  const difficultyChanged =
+    updates.difficulty !== undefined && updates.difficulty !== currentTask.difficulty;
+  const durationChanged =
+    updates.estimatedMinutes !== undefined &&
+    updates.estimatedMinutes !== currentTask.estimatedMinutes;
+
+  if (difficultyChanged || durationChanged) {
+    return {
+      allowed: false,
+      reason: `Reward-relevant fields (difficulty, estimated duration) become immutable once a task enters ${currentTask.status}.`,
+    };
+  }
+
+  return { allowed: true };
+}
+
+/**
+ * Validates whether a task meets server-authoritative state requirements
+ * to earn XP upon completion.
+ *
+ * Decision 1 (Require Start):
+ * A task MUST transition through IN_PROGRESS with a server-clock startedAt
+ * to be eligible for XP. Completing directly from PENDING yields 0 XP.
+ */
+export function validateTaskXpEligibility(task: {
+  status: TaskStatus;
+  startedAt?: Date | null;
+}): { eligible: boolean; reason?: "NEVER_STARTED" | "INVALID_STATE" } {
+  if (task.status === TaskStatus.PENDING || !task.startedAt) {
+    return { eligible: false, reason: "NEVER_STARTED" };
+  }
+
+  if (task.status !== TaskStatus.IN_PROGRESS) {
+    return { eligible: false, reason: "INVALID_STATE" };
+  }
+
+  return { eligible: true };
+}

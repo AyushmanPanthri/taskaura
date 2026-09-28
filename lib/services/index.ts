@@ -1,14 +1,10 @@
 // ============================================================
-// LifeXP — Services Barrel Export
+// Task Aura — Services Barrel Export
 // ============================================================
 
-export * from "./store";
-export * from "./xp-service";
-export * from "./task-service";
-export * from "./focus-service";
-export * from "./aggregation-service";
-export * from "./leaderboard-service";
-export * from "./sync-service";
-export * from "./habit-service";
-export * from "./progress-service";
+export * from "./pg-progress-service";
+export * from "./ai-service";
+export * from "./reconciliation-service";
 export * from "./demo-seed";
+export * from "./progress-service";
+export * from "./leaderboard-service";

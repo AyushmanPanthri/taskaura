@@ -25,6 +25,9 @@ export async function GET(req: NextRequest) {
         isGuest: true,
         createdAt: true,
         updatedAt: true,
+        streakRecord: {
+          select: { currentStreak: true, bestStreak: true },
+        },
       },
     });
 
@@ -41,6 +44,7 @@ export async function GET(req: NextRequest) {
         isGuest: user.isGuest,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
+        streakRecord: user.streakRecord ?? { currentStreak: 0, bestStreak: 0 },
       },
     });
   } catch (err) {

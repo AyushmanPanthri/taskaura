@@ -13,7 +13,7 @@ import { achievementRepository } from "../lib/repositories/achievement-repositor
 import { xpRepository } from "../lib/repositories/xp-repository";
 import { Difficulty, XPSourceType, RewardType } from "../lib/logic/types";
 
-const CONCURRENCY_USER_ID = "user_test_concurrency";
+const CONCURRENCY_USER_ID = "11111111-1111-4111-8111-111111111111";
 
 describe("Phase D — PostgreSQL Concurrency & Atomic Invariants", () => {
   beforeAll(async () => {
@@ -183,7 +183,18 @@ describe("Phase D — PostgreSQL Concurrency & Atomic Invariants", () => {
 
   // ── Scenario D: Simultaneous Achievement Unlock Attempts ──────
   it("Scenario D: simultaneous achievement unlock attempts yield exactly 1 record", async () => {
-    const achievementId = "ach_streak_3";
+    let ach = await prisma.achievement.findFirst();
+    if (!ach) {
+      ach = await prisma.achievement.create({
+        data: {
+          id: "33333333-3333-4333-8333-333333333333",
+          name: "Streak Master",
+          description: "Streak of 3",
+          condition: "{}",
+        },
+      });
+    }
+    const achievementId = ach.id;
 
     // 15 simultaneous unlock attempts
     const promises = Array.from({ length: 15 }, () =>

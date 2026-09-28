@@ -39,6 +39,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     displayName: string;
     avatar: string;
     isGuest?: boolean;
+    role?: string;
   } | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -66,6 +67,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             displayName: json.data.user.displayName || "Adventurer",
             avatar: json.data.user.avatar || "🧑‍💻",
             isGuest: json.data.user.isGuest,
+            role: json.data.user.role,
           });
         }
       } catch {
@@ -73,7 +75,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       }
     }
 
-    if (pathname !== "/login") {
+    if (pathname !== "/login" && !pathname?.startsWith("/admin")) {
       void loadProgress();
       void loadProfile();
     }
@@ -125,8 +127,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // If on login page, render children directly without app shell sidebar
-  if (pathname === "/login") {
+  // If on login page or admin portal, render children directly without normal app shell sidebar
+  if (pathname === "/login" || pathname?.startsWith("/admin")) {
     return <>{children}</>;
   }
 
@@ -178,6 +180,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </Link>
             );
           })}
+
+          {userProfile?.role === "ADMIN" && (
+            <Link
+              href="/admin"
+              className={`nav-item text-amber-300 hover:text-amber-200 border border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 mt-2 ${
+                pathname?.startsWith("/admin") ? "active" : ""
+              }`}
+            >
+              <span className="text-base">🛡️</span>
+              <span className="font-bold flex items-center gap-1.5">
+                Admin HQ
+                <span className="text-[0.6rem] px-1.5 py-0.5 rounded bg-amber-500/30 text-amber-200 border border-amber-400/30 uppercase tracking-wider font-mono">
+                  STAFF
+                </span>
+              </span>
+            </Link>
+          )}
         </nav>
 
         {/* Sidebar Mini Profile & Actions */}

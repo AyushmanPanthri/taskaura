@@ -1,81 +1,208 @@
 // ============================================================
 // Task Aura — Authoritative Demo Profile Seeder (§21)
-//
-// Seeds the canonical server-side profile:
-//   - userId: "user_demo_14d"
-//   - Goal: "Exam Preparation"
-//   - Level 18, with 1,880 / 2,000 XP (Total XP: 20,580)
-//   - Streak: 6 days (1 grace token)
-//   - 14 days of historical DailyMetrics (Maturity: ESTABLISHED)
-//   - 2 active tasks, 3 habits, achievements, and leaderboard
+// Seeds canonical demo profile directly into PostgreSQL with valid UUIDs.
+// No in-memory store dependency.
 // ============================================================
 
-import { store } from "./store";
-import {
-  Difficulty,
-  GoalStatus,
-  HabitFrequency,
-  RewardType,
-  TaskSource,
-  TaskStatus,
-  XPSourceType,
-} from "../logic/types";
-import { snapshotLeaderboard } from "./leaderboard-service";
+import { prisma } from "../prisma";
 
-export const DEMO_USER_ID = "user_demo_14d";
+export const DEMO_USER_ID = "00000000-0000-0000-0000-000000000014";
+export const DEMO_TASK_1_ID = "00000000-0000-0000-0000-000000000001";
+export const DEMO_TASK_2_ID = "00000000-0000-0000-0000-000000000002";
+export const DEMO_HABIT_1_ID = "00000000-0000-0000-0000-000000000003";
+export const DEMO_HABIT_2_ID = "00000000-0000-0000-0000-000000000004";
+export const DEMO_HABIT_3_ID = "00000000-0000-0000-0000-000000000005";
+export const DEMO_GOAL_ID = "00000000-0000-0000-0000-000000000006";
 
-let isSeeded = false;
+export const DEMO_PEER_1_ID = "00000000-0000-0000-0000-000000000021";
+export const DEMO_PEER_2_ID = "00000000-0000-0000-0000-000000000022";
+export const DEMO_PEER_3_ID = "00000000-0000-0000-0000-000000000023";
+export const DEMO_PEER_4_ID = "00000000-0000-0000-0000-000000000024";
 
+/**
+ * Backward-compatible stub for callers expecting synchronous call.
+ * Actual durable state is seeded via seedDatabaseDemoProfile().
+ */
 export function ensureDemoSeed(): void {
-  if (isSeeded && store.users.has(DEMO_USER_ID)) {
-    return;
-  }
+  // Pure PostgreSQL persistence — no in-memory store
+}
 
-  // 1. User Record
-  store.users.set(DEMO_USER_ID, {
-    id: DEMO_USER_ID,
-    email: "demo@taskaura.dev",
-    passwordHash: "demo_hash",
-    displayName: "Alex Rivera",
-    timezone: "UTC",
-    createdAt: new Date(Date.now() - 15 * 86400_000),
-  });
-
-  store.userSettings.set(DEMO_USER_ID, {
-    userId: DEMO_USER_ID,
-    dailyGoalXp: 50,
-    weekdayWeekendSplit: false,
-    retentionDays: 90,
-  });
-
-  // 2. Goal: Exam Preparation
-  store.goals.set("goal_exam_prep", {
-    id: "goal_exam_prep",
-    userId: DEMO_USER_ID,
-    title: "Exam Preparation",
-    description: "Prepare thoroughly for upcoming comprehensive board exams",
-    category: "ACADEMIC",
-    targetValue: 100,
-    currentValue: 65,
-    status: GoalStatus.ACTIVE,
-    createdAt: new Date(Date.now() - 14 * 86400_000),
-  });
-
-  // 3. 14 Days of DailyMetrics (History establishing ESTABLISHED maturity >= 7 days)
+/**
+ * Seeds the canonical demo profile into PostgreSQL for integration tests.
+ * Clean, repeatable, and fully isolated.
+ */
+export async function seedDatabaseDemoProfile(): Promise<void> {
   const today = new Date();
+  const todayStr = today.toISOString().slice(0, 10);
+
+  // 1. Demo User
+  await prisma.user.upsert({
+    where: { id: DEMO_USER_ID },
+    update: {
+      displayName: "Alex Rivera",
+      email: "demo@taskaura.dev",
+      isGuest: false,
+    },
+    create: {
+      id: DEMO_USER_ID,
+      displayName: "Alex Rivera",
+      email: "demo@taskaura.dev",
+      passwordHash: "demo_hash",
+      isGuest: false,
+      createdAt: new Date(today.getTime() - 15 * 86400_000),
+    },
+  });
+
+  // 2. Settings & Streak
+  await prisma.userSettings.upsert({
+    where: { userId: DEMO_USER_ID },
+    update: { dailyGoalXp: 500 },
+    create: { userId: DEMO_USER_ID, dailyGoalXp: 500 },
+  });
+
+  await prisma.streakRecord.upsert({
+    where: { userId: DEMO_USER_ID },
+    update: {
+      currentStreak: 6,
+      bestStreak: 12,
+      lastEligibleDate: todayStr,
+      graceUsedThisWeek: false,
+    },
+    create: {
+      userId: DEMO_USER_ID,
+      currentStreak: 6,
+      bestStreak: 12,
+      lastEligibleDate: todayStr,
+      graceUsedThisWeek: false,
+    },
+  });
+
+  // 3. Goal
+  await prisma.goal.upsert({
+    where: { id: DEMO_GOAL_ID },
+    update: {
+      title: "Exam Preparation",
+      status: "ACTIVE",
+      currentValue: 65,
+      targetValue: 100,
+    },
+    create: {
+      id: DEMO_GOAL_ID,
+      userId: DEMO_USER_ID,
+      title: "Exam Preparation",
+      description: "Prepare thoroughly for upcoming comprehensive board exams",
+      category: "ACADEMIC",
+      targetValue: 100,
+      currentValue: 65,
+      status: "ACTIVE",
+      createdAt: new Date(today.getTime() - 14 * 86400_000),
+    },
+  });
+
+  // 4. Tasks & Audit Logs (clean and recreate to guarantee pristine initial state)
+  await prisma.adminAuditLog.deleteMany({
+    where: {
+      OR: [
+        { adminUserId: DEMO_USER_ID },
+        { targetUserId: DEMO_USER_ID },
+      ],
+    },
+  });
+  await prisma.task.deleteMany({ where: { userId: DEMO_USER_ID } });
+
+  await prisma.task.create({
+    data: {
+      id: DEMO_TASK_1_ID,
+      userId: DEMO_USER_ID,
+      title: "Review Chapter 4 Physics Problems",
+      description: "Kinematics and Newton's laws problem set",
+      difficulty: "HARD",
+      status: "PENDING",
+      dueAt: new Date(today.getTime() + 86400_000 * 2),
+      source: "USER",
+      createdAt: new Date(today.getTime() - 3600_000 * 5),
+    },
+  });
+
+  await prisma.task.create({
+    data: {
+      id: DEMO_TASK_2_ID,
+      userId: DEMO_USER_ID,
+      title: "Cellular Respiration Flashcards",
+      description: "Krebs cycle and electron transport chain terminology",
+      difficulty: "NORMAL",
+      status: "PENDING",
+      dueAt: null,
+      source: "USER",
+      createdAt: new Date(today.getTime() - 3600_000 * 2),
+    },
+  });
+
+  // 4b. Focus Sessions (clean any running or completed sessions)
+  await prisma.focusSession.deleteMany({ where: { userId: DEMO_USER_ID } });
+
+  // 5. Habits & HabitLog
+  await prisma.habitLog.deleteMany({
+    where: { habit: { userId: DEMO_USER_ID } },
+  });
+  await prisma.habit.deleteMany({ where: { userId: DEMO_USER_ID } });
+
+  await prisma.habit.create({
+    data: {
+      id: DEMO_HABIT_1_ID,
+      userId: DEMO_USER_ID,
+      title: "Daily Flashcard Review",
+      frequency: "DAILY",
+      streakCurrent: 14,
+      streakBest: 21,
+      createdAt: new Date(today.getTime() - 1 * 86400_000),
+      habitLogs: {
+        create: {
+          date: todayStr,
+          completed: true,
+        },
+      },
+    },
+  });
+
+  await prisma.habit.create({
+    data: {
+      id: DEMO_HABIT_2_ID,
+      userId: DEMO_USER_ID,
+      title: "Morning Deep Work (45 min)",
+      frequency: "DAILY",
+      streakCurrent: 6,
+      streakBest: 10,
+      createdAt: new Date(today.getTime() - 5 * 86400_000),
+    },
+  });
+
+  await prisma.habit.create({
+    data: {
+      id: DEMO_HABIT_3_ID,
+      userId: DEMO_USER_ID,
+      title: "Weekly Lecture Review",
+      frequency: "DAILY",
+      streakCurrent: 3,
+      streakBest: 5,
+      createdAt: new Date(today.getTime() - 10 * 86400_000),
+    },
+  });
+
+  // 6. DailyMetrics (15 days)
+  await prisma.dailyMetrics.deleteMany({ where: { userId: DEMO_USER_ID } });
+  const metricsData = [];
   for (let i = 14; i >= 0; i--) {
     const d = new Date(today.getTime() - i * 86400_000);
-    const dateStr = d.toISOString().slice(0, 10);
-
-    store.dailyMetrics.set(`${DEMO_USER_ID}:${dateStr}`, {
-      id: `metric_${DEMO_USER_ID}_${dateStr}`,
+    const dStr = d.toISOString().slice(0, 10);
+    metricsData.push({
       userId: DEMO_USER_ID,
-      date: dateStr,
+      date: dStr,
       totalScreenTime: 14400,
       appOpens: 42,
       focusMinutes: 35 + (i % 4) * 10,
-      distractionIndex: 15 + (i % 5) * 2,
       taskCompletionRate: 0.75 + (i % 2) * 0.1,
+      distractionIndex: 15 + (i % 5) * 2,
       focusScore: 82,
       consistencyScore: 88,
       goalAlignment: 90,
@@ -83,249 +210,119 @@ export function ensureDemoSeed(): void {
       routineStability: 80,
     });
   }
+  await prisma.dailyMetrics.createMany({ data: metricsData });
 
-  // 4. Streak Tracking: 6 Days Active Streak
-  store.streakRecords.set(DEMO_USER_ID, {
-    userId: DEMO_USER_ID,
-    currentStreak: 6,
-    bestStreak: 12,
-    lastEligibleDate: today.toISOString().slice(0, 10),
-    graceUsedThisWeek: false,
-  });
-
-  // Seed last 6 days as active streak history
-  for (let i = 6; i >= 1; i--) {
-    const d = new Date(today.getTime() - i * 86400_000);
-    const dateStr = d.toISOString().slice(0, 10);
-    store.streakDays.set(`${DEMO_USER_ID}:${dateStr}`, {
-      userId: DEMO_USER_ID,
-      localDate: dateStr,
-      status: "SUCCESS",
-      streakAfter: 7 - i,
-    });
-  }
-
-  // 5. Authoritative XP Ledger summing exactly to 20,580 XP (Level 18, 1,880/2,000 XP)
-  // Historical transactions: 18,700 baseline XP + 1,880 current level XP = 20,580
-  const baselineBatch = 18_700;
-  store.xpTransactions.set(`tx_demo_historical`, {
-    id: "tx_demo_historical",
-    userId: DEMO_USER_ID,
-    amount: baselineBatch,
-    sourceType: XPSourceType.TASK,
-    sourceId: "task_historical_batch",
-    rewardType: RewardType.COMPLETION,
-    idempotencyKey: `init:${DEMO_USER_ID}:historical`,
-    baseXp: baselineBatch,
-    difficultyMultiplier: 1,
-    streakBonus: 0,
-    createdAt: new Date(today.getTime() - 7 * 86400_000),
-    status: "VALID",
-    breakdown: {
-      kind: "TASK",
-      minutes: 30,
-      base: baselineBatch,
-      effort: 1,
-      difficulty: 1,
-      difficultyName: "NORMAL",
-      verification: 1,
-      verificationKind: "FOCUS_VERIFIED",
-      raw: baselineBatch,
-      paid: baselineBatch,
-      softCapped: false,
-    },
-  });
-
-  // Current level progress: 1,880 XP across recent hours today (current week)
-  store.xpTransactions.set(`tx_demo_recent_1`, {
-    id: "tx_demo_recent_1",
-    userId: DEMO_USER_ID,
-    amount: 1000,
-    sourceType: XPSourceType.FOCUS_SESSION,
-    sourceId: "focus_session_recent_1",
-    rewardType: RewardType.COMPLETION,
-    idempotencyKey: `init:${DEMO_USER_ID}:recent_1`,
-    baseXp: 1000,
-    difficultyMultiplier: 1,
-    streakBonus: 0,
-    createdAt: new Date(today.getTime() - 4 * 3600_000),
-    status: "VALID",
-    breakdown: {
-      kind: "FOCUS_SESSION",
-      minutes: 45,
-      base: 1000,
-      effort: 1,
-      difficulty: 1,
-      difficultyName: "NORMAL",
-      verification: 1,
-      verificationKind: "FOCUS_VERIFIED",
-      raw: 1000,
-      paid: 1000,
-      softCapped: false,
-    },
-  });
-
-  store.xpTransactions.set(`tx_demo_recent_2`, {
-    id: "tx_demo_recent_2",
-    userId: DEMO_USER_ID,
-    amount: 880,
-    sourceType: XPSourceType.TASK,
-    sourceId: "task_recent_2",
-    rewardType: RewardType.COMPLETION,
-    idempotencyKey: `init:${DEMO_USER_ID}:recent_2`,
-    baseXp: 880,
-    difficultyMultiplier: 1,
-    streakBonus: 0,
-    createdAt: new Date(today.getTime() - 2 * 3600_000),
-    status: "VALID",
-    breakdown: {
-      kind: "TASK",
-      minutes: 30,
-      base: 880,
-      effort: 1,
-      difficulty: 1,
-      difficultyName: "NORMAL",
-      verification: 1,
-      verificationKind: "SELF_CONFIRMED",
-      raw: 880,
-      paid: 880,
-      softCapped: false,
-    },
-  });
-
-  // Reconcile user progress cache to guarantee Level 18, 20,580 XP
-  store.reconcileUserProgress(DEMO_USER_ID);
-
-  // 6. Tasks: 2 Open Tasks
-  store.tasks.set("task_demo_1", {
-    id: "task_demo_1",
-    userId: DEMO_USER_ID,
-    title: "Review Biology Core Concepts (Ch. 4-6)",
-    description: "Focus on cellular respiration and metabolic pathways",
-    difficulty: Difficulty.HARD,
-    estimatedMinutes: 45,
-    status: TaskStatus.IN_PROGRESS,
-    source: TaskSource.USER,
-    questId: null,
-    dueAt: null,
-    completedAt: null,
-    createdAt: new Date(today.getTime() - 3600_000 * 3),
-  });
-
-  store.tasks.set("task_demo_2", {
-    id: "task_demo_2",
-    userId: DEMO_USER_ID,
-    title: "Complete 20 Practice Questions",
-    description: "Timed practice run without notes",
-    difficulty: Difficulty.NORMAL,
-    estimatedMinutes: 30,
-    status: TaskStatus.PENDING,
-    source: TaskSource.USER,
-    questId: null,
-    dueAt: null,
-    completedAt: null,
-    createdAt: new Date(today.getTime() - 3600_000 * 2),
-  });
-
-  // 7. Habits & Logs
-  const habit1Id = "habit_demo_review";
-  const habit2Id = "habit_demo_flashcards";
-  const habit3Id = "habit_demo_hydration";
-
-  store.habits.set(habit1Id, {
-    id: habit1Id,
-    userId: DEMO_USER_ID,
-    title: "Morning Review",
-    frequency: HabitFrequency.DAILY,
-    streakCurrent: 6,
-    streakBest: 12,
-    createdAt: new Date(today.getTime() - 14 * 86400_000),
-  });
-
-  store.habits.set(habit2Id, {
-    id: habit2Id,
-    userId: DEMO_USER_ID,
-    title: "Anki Flashcards",
-    frequency: HabitFrequency.DAILY,
-    streakCurrent: 4,
-    streakBest: 8,
-    createdAt: new Date(today.getTime() - 14 * 86400_000),
-  });
-
-  store.habits.set(habit3Id, {
-    id: habit3Id,
-    userId: DEMO_USER_ID,
-    title: "Hydration Check",
-    frequency: HabitFrequency.DAILY,
-    streakCurrent: 10,
-    streakBest: 14,
-    createdAt: new Date(today.getTime() - 14 * 86400_000),
-  });
-
-  // Log habit 1 as completed today
-  const todayStr = today.toISOString().slice(0, 10);
-  store.addHabitLog({
-    id: `log_${habit1Id}_${todayStr}`,
-    habitId: habit1Id,
-    date: todayStr,
-    completed: true,
+  // 7. Authoritative XP Ledger summing to 20,580
+  await prisma.xPTransaction.deleteMany({ where: { userId: DEMO_USER_ID } });
+  await prisma.xPTransaction.createMany({
+    data: [
+      {
+        userId: DEMO_USER_ID,
+        amount: 18700,
+        sourceType: "TASK",
+        sourceId: "task_historical_batch",
+        rewardType: "COMPLETION",
+        idempotencyKey: `init:${DEMO_USER_ID}:historical`,
+        baseXp: 18700,
+        difficultyMultiplier: 1,
+        streakBonus: 0,
+        createdAt: new Date(today.getTime() - 2 * 3600_000),
+      },
+      {
+        userId: DEMO_USER_ID,
+        amount: 1000,
+        sourceType: "FOCUS_SESSION",
+        sourceId: "focus_session_recent_1",
+        rewardType: "COMPLETION",
+        idempotencyKey: `init:${DEMO_USER_ID}:recent_1`,
+        baseXp: 1000,
+        difficultyMultiplier: 1,
+        streakBonus: 0,
+        createdAt: new Date(today.getTime() - 1 * 3600_000),
+      },
+      {
+        userId: DEMO_USER_ID,
+        amount: 500,
+        sourceType: "TASK",
+        sourceId: "task_recent_2",
+        rewardType: "COMPLETION",
+        idempotencyKey: `init:${DEMO_USER_ID}:recent_2`,
+        baseXp: 500,
+        difficultyMultiplier: 1,
+        streakBonus: 0,
+        createdAt: new Date(today.getTime() - 40 * 60_000),
+      },
+      {
+        userId: DEMO_USER_ID,
+        amount: 380,
+        sourceType: "HABIT",
+        sourceId: "habit_recent_3",
+        rewardType: "COMPLETION",
+        idempotencyKey: `init:${DEMO_USER_ID}:recent_3`,
+        baseXp: 380,
+        difficultyMultiplier: 1,
+        streakBonus: 0,
+        createdAt: new Date(today.getTime() - 20 * 60_000),
+      },
+    ],
   });
 
   // 8. Achievements
-  store.userAchievements.push({
-    userId: DEMO_USER_ID,
-    achievementId: "FIRST_FOCUS",
-    unlockedAt: new Date(today.getTime() - 10 * 86400_000),
+  const firstFocus = await prisma.achievement.findFirst({
+    where: { name: "First Step" },
   });
-  store.userAchievements.push({
-    userId: DEMO_USER_ID,
-    achievementId: "CONSISTENCY_7",
-    unlockedAt: new Date(today.getTime() - 5 * 86400_000),
-  });
-  store.userAchievements.push({
-    userId: DEMO_USER_ID,
-    achievementId: "LEVEL_10",
-    unlockedAt: new Date(today.getTime() - 3 * 86400_000),
-  });
-
-  // 9. Seed other competitive users for leaderboard
-  const peers = [
-    { id: "user_alex_c", name: "Alex Chen", xp: 24500 },
-    { id: "user_priya_s", name: "Priya S.", xp: 19800 },
-    { id: "user_marcus_w", name: "Marcus W.", xp: 16200 },
-    { id: "user_sofia_l", name: "Sofia L.", xp: 14100 },
-  ];
-
-  for (const peer of peers) {
-    store.users.set(peer.id, {
-      id: peer.id,
-      email: `${peer.id}@example.com`,
-      passwordHash: "peer_hash",
-      displayName: peer.name,
-      timezone: "UTC",
-      createdAt: new Date(today.getTime() - 30 * 86400_000),
-    });
-    store.xpTransactions.set(`tx_${peer.id}`, {
-      id: `tx_${peer.id}`,
-      userId: peer.id,
-      amount: peer.xp,
-      sourceType: XPSourceType.TASK,
-      sourceId: `task_${peer.id}`,
-      rewardType: RewardType.COMPLETION,
-      idempotencyKey: `init:${peer.id}`,
-      baseXp: peer.xp,
-      difficultyMultiplier: 1,
-      streakBonus: 0,
-      createdAt: today,
-      status: "VALID",
+  if (firstFocus) {
+    await prisma.userAchievement.upsert({
+      where: {
+        userId_achievementId: {
+          userId: DEMO_USER_ID,
+          achievementId: firstFocus.id,
+        },
+      },
+      update: {},
+      create: {
+        userId: DEMO_USER_ID,
+        achievementId: firstFocus.id,
+        unlockedAt: new Date(today.getTime() - 10 * 86400_000),
+      },
     });
   }
 
-  // Generate current week leaderboard snapshot
-  snapshotLeaderboard();
+  // 9. Peers for leaderboard
+  const peers = [
+    { id: DEMO_PEER_1_ID, name: "Alex Chen", xp: 24500, email: "alex.c@taskaura.dev" },
+    { id: DEMO_PEER_2_ID, name: "Priya S.", xp: 19800, email: "priya.s@taskaura.dev" },
+    { id: DEMO_PEER_3_ID, name: "Marcus W.", xp: 16200, email: "marcus.w@taskaura.dev" },
+    { id: DEMO_PEER_4_ID, name: "Sofia L.", xp: 14100, email: "sofia.l@taskaura.dev" },
+  ];
 
-  isSeeded = true;
+  for (const peer of peers) {
+    await prisma.user.upsert({
+      where: { id: peer.id },
+      update: { displayName: peer.name },
+      create: {
+        id: peer.id,
+        displayName: peer.name,
+        email: peer.email,
+        passwordHash: "peer_hash",
+        isGuest: false,
+      },
+    });
+
+    await prisma.xPTransaction.deleteMany({ where: { userId: peer.id } });
+    await prisma.xPTransaction.create({
+      data: {
+        userId: peer.id,
+        amount: peer.xp,
+        sourceType: "TASK",
+        sourceId: `peer_task_${peer.id}`,
+        rewardType: "COMPLETION",
+        idempotencyKey: `init:${peer.id}`,
+        baseXp: peer.xp,
+        difficultyMultiplier: 1,
+        streakBonus: 0,
+        createdAt: new Date(today.getTime() - 3600_000),
+      },
+    });
+  }
 }
-
-// Automatically ensure seeded upon module load
-ensureDemoSeed();

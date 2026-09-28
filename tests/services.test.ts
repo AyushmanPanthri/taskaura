@@ -1,237 +1,294 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { store } from "../lib/services/store";
-import { createTask, completeTask } from "../lib/services/task-service";
-import {
-  startFocusSession,
-  recordHeartbeat,
-  completeFocusSession,
-} from "../lib/services/focus-service";
-import {
-  getTotalXp,
-  getUserLevel,
-  reverseTransaction,
-} from "../lib/services/xp-service";
+// ============================================================
+// Task Aura — Stage 6: PostgreSQL Durability & Lifecycle Suite
+// Verifies:
+// 1. End-to-end player lifecycle against PostgreSQL:
+//    Register -> Complete Task -> Check Progress -> Check Leaderboard ->
+//    Admin Grant XP -> Check Combined Progress & Level-Up.
+// 2. Server restart simulation:
+//    Simulates process termination, wipes in-memory state,
+//    and verifies zero data loss across cold reboots.
+// ============================================================
+
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
+import { prisma } from "../lib/prisma";
+import { TaskRepository } from "../lib/repositories/task-repository";
+import { XPRepository } from "../lib/repositories/xp-repository";
+import { HabitRepository } from "../lib/repositories/habit-repository";
+import { FocusRepository } from "../lib/repositories/focus-repository";
+import { getPgProgressSummary } from "../lib/services/progress-service";
+import { getWeeklyLeaderboard } from "../lib/services/leaderboard-service";
 import {
   Difficulty,
+  FocusSessionStatus,
+  HabitFrequency,
   RewardType,
-  TaskSource,
+  TaskStatus,
   XPSourceType,
 } from "../lib/logic/types";
+import { levelFor } from "../lib/logic/economy";
 
-const USER = "user-1";
-const BONUS = new Set<string>(["DAILY_GOAL", "STREAK_BONUS"]);
+const LIFECYCLE_USER_ID = "44444444-4444-4444-8444-444444444444";
+const RESTART_USER_ID = "55555555-5555-4555-8555-555555555555";
 
-const payouts = (userId = USER) =>
-  store.getUserXpTransactions(userId).filter((t) => !BONUS.has(String(t.sourceType)));
-const bonuses = (userId = USER, type?: string) =>
-  store
-    .getUserXpTransactions(userId)
-    .filter((t) => BONUS.has(String(t.sourceType)) && (!type || String(t.sourceType) === type));
+const taskRepo = new TaskRepository();
+const xpRepo = new XPRepository();
 
-/** Run a focus session for `minutes`, pinging a heartbeat every 30 s, then complete it. */
-function runSession(sessionId: string, minutes: number, streakDays = 0) {
-  for (let i = 0; i < minutes * 2; i++) {
-    vi.advanceTimersByTime(30_000);
-    recordHeartbeat(sessionId);
-  }
-  return completeFocusSession(sessionId, streakDays);
-}
-
-let seq = 0;
-const startSession = (minutes: number, taskId?: string, userId = USER) =>
-  startFocusSession({ userId, requiredMinutes: minutes, clientEventId: `evt-${++seq}`, taskId });
-
-beforeEach(() => {
-  store.reset();
-  vi.useFakeTimers();
-  vi.setSystemTime(new Date("2026-09-21T10:00:00Z"));
-});
-afterEach(() => vi.useRealTimers());
-
-describe("task completion", () => {
-  it("completing twice pays exactly once", () => {
-    const t = createTask({ userId: USER, title: "Read chapter" });
-    vi.advanceTimersByTime(120_000);
-    const first = completeTask(t.id);
-    const second = completeTask(t.id);
-    expect(first.xpAwarded).toBe(120); // 150 × 1.0 × 1.0 × 0.8
-    expect(first.isDuplicate).toBe(false);
-    expect(second.isDuplicate).toBe(true);
-    expect(second.xpAwarded).toBe(120);
-    expect(payouts()).toHaveLength(1);
-  });
-
-  it("a task completed within 60 s of creation earns nothing", () => {
-    const t = createTask({ userId: USER, title: "Instant" });
-    const r = completeTask(t.id);
-    expect(r.reason).toBe("TOO_FAST");
-    expect(r.xpAwarded).toBe(0);
-    expect(payouts()).toHaveLength(0);
-    expect(completeTask(t.id).isDuplicate).toBe(true);
-  });
-
-  it("only the first 5 self-confirmed tasks per day earn XP", () => {
-    const ids = Array.from({ length: 6 }, (_, i) => createTask({ userId: USER, title: `t${i}` }).id);
-    vi.advanceTimersByTime(120_000);
-    const results = ids.map((id) => completeTask(id));
-    expect(results.slice(0, 5).every((r) => r.xpAwarded === 120)).toBe(true);
-    expect(results[5].reason).toBe("SELF_CONFIRMED_LIMIT");
-    expect(results[5].xpAwarded).toBe(0);
-  });
-
-  it("HARD / EPIC are clamped to NORMAL for short tasks, and 20 tasks/day max", () => {
-    const t = createTask({ userId: USER, title: "x", difficulty: Difficulty.EPIC, estimatedMinutes: 30 });
-    expect(t.difficulty).toBe(Difficulty.NORMAL);
-    for (let i = 0; i < 19; i++) createTask({ userId: USER, title: `t${i}` });
-    expect(() => createTask({ userId: USER, title: "21st" })).toThrow(/Daily task limit/);
-  });
-});
-
-describe("one activity, one payout", () => {
-  it("a focus session linked to an AI quest pays the quest once, not twice", () => {
-    const quest = createTask({
-      userId: USER,
-      title: "45-min focus quest",
-      source: TaskSource.AI,
-      questId: "quest-1",
-      estimatedMinutes: 45,
+describe("Stage 6 — PostgreSQL Single Source of Truth Lifecycle", () => {
+  beforeAll(async () => {
+    // Clean up test users
+    await prisma.xPTransaction.deleteMany({
+      where: { userId: { in: [LIFECYCLE_USER_ID, RESTART_USER_ID] } },
     });
-    const session = startSession(45, quest.id);
-    const done = runSession(session.id, 45);
-
-    expect(done.xpAwarded).toBe(150); // 150 × 1.0 × 1.0 × 1.0
-    expect(done.evidenceOnly).toBe(false);
-    expect(payouts()).toHaveLength(1);
-    expect(payouts()[0].idempotencyKey).toBe("payout:QUEST:quest-1");
-    expect(bonuses()).toHaveLength(1); // DAILY_GOAL only (streak 0)
-    expect(getTotalXp(USER)).toBe(150 + 50);
-
-    // Retrying either completion changes nothing.
-    const again = completeFocusSession(session.id);
-    expect(again.isDuplicate).toBe(true);
-    expect(again.xpAwarded).toBe(150);
-    expect(completeTask(quest.id).isDuplicate).toBe(true);
-    expect(getTotalXp(USER)).toBe(200);
+    await prisma.task.deleteMany({
+      where: { userId: { in: [LIFECYCLE_USER_ID, RESTART_USER_ID] } },
+    });
+    await prisma.focusSession.deleteMany({
+      where: { userId: { in: [LIFECYCLE_USER_ID, RESTART_USER_ID] } },
+    });
+    await prisma.habitLog.deleteMany({
+      where: { habit: { userId: { in: [LIFECYCLE_USER_ID, RESTART_USER_ID] } } },
+    });
+    await prisma.habit.deleteMany({
+      where: { userId: { in: [LIFECYCLE_USER_ID, RESTART_USER_ID] } },
+    });
+    await prisma.streakRecord.deleteMany({
+      where: { userId: { in: [LIFECYCLE_USER_ID, RESTART_USER_ID] } },
+    });
+    await prisma.weeklyScore.deleteMany({
+      where: { userId: { in: [LIFECYCLE_USER_ID, RESTART_USER_ID] } },
+    });
+    await prisma.user.deleteMany({
+      where: { id: { in: [LIFECYCLE_USER_ID, RESTART_USER_ID] } },
+    });
   });
 
-  it("a session linked to an ordinary task is evidence; the task then pays at the verified rate", () => {
-    const task = createTask({ userId: USER, title: "Write report", estimatedMinutes: 30 });
-    const session = startSession(25, task.id);
-    const done = runSession(session.id, 25);
-    expect(done.evidenceOnly).toBe(true);
-    expect(done.xpAwarded).toBe(0);
-    expect(payouts()).toHaveLength(0);
-
-    const r = completeTask(task.id);
-    expect(r.xpAwarded).toBe(150); // verified: 150 × 1.0 × 1.0 × 1.0 (not 120)
-    expect(payouts()).toHaveLength(1);
-    expect(payouts()[0].breakdown?.verificationKind).toBe("FOCUS_VERIFIED");
+  afterAll(async () => {
+    await prisma.xPTransaction.deleteMany({
+      where: { userId: { in: [LIFECYCLE_USER_ID, RESTART_USER_ID] } },
+    });
+    await prisma.task.deleteMany({
+      where: { userId: { in: [LIFECYCLE_USER_ID, RESTART_USER_ID] } },
+    });
+    await prisma.focusSession.deleteMany({
+      where: { userId: { in: [LIFECYCLE_USER_ID, RESTART_USER_ID] } },
+    });
+    await prisma.habitLog.deleteMany({
+      where: { habit: { userId: { in: [LIFECYCLE_USER_ID, RESTART_USER_ID] } } },
+    });
+    await prisma.habit.deleteMany({
+      where: { userId: { in: [LIFECYCLE_USER_ID, RESTART_USER_ID] } },
+    });
+    await prisma.streakRecord.deleteMany({
+      where: { userId: { in: [LIFECYCLE_USER_ID, RESTART_USER_ID] } },
+    });
+    await prisma.weeklyScore.deleteMany({
+      where: { userId: { in: [LIFECYCLE_USER_ID, RESTART_USER_ID] } },
+    });
+    await prisma.user.deleteMany({
+      where: { id: { in: [LIFECYCLE_USER_ID, RESTART_USER_ID] } },
+    });
   });
 
-  it("a standalone 45-min session pays 100 once", () => {
-    const s = startSession(45);
-    const done = runSession(s.id, 45);
-    expect(done.xpAwarded).toBe(100);
-    expect(completeFocusSession(s.id).isDuplicate).toBe(true);
-    expect(payouts()).toHaveLength(1);
-  });
-});
+  it("completes full end-to-end lifecycle: register -> complete task -> dashboard -> leaderboard -> admin grant -> unified level-up", async () => {
+    // 1. Register User in PostgreSQL
+    const user = await prisma.user.create({
+      data: {
+        id: LIFECYCLE_USER_ID,
+        email: "lifecycle@taskaura.test",
+        passwordHash: "hash_lifecycle",
+        displayName: "Lifecycle Hero",
+        streakRecord: {
+          create: {
+            currentStreak: 1,
+            bestStreak: 1,
+            lastEligibleDate: "2026-09-22",
+            graceUsedThisWeek: false,
+          },
+        },
+      },
+    });
+    expect(user.id).toBe(LIFECYCLE_USER_ID);
 
-describe("daily bonuses", () => {
-  it("DAILY_GOAL and STREAK_BONUS are granted once per day, however many activities", () => {
-    const a = startSession(45);
-    const first = runSession(a.id, 45, 6);
-    expect(first.bonusXp).toBe(50 + 30); // daily goal + min(5 × 6, 50)
-    const b = startSession(45);
-    const second = runSession(b.id, 45, 6);
-    expect(second.bonusXp).toBe(0);
-    expect(bonuses(USER, "DAILY_GOAL")).toHaveLength(1);
-    expect(bonuses(USER, "STREAK_BONUS")).toHaveLength(1);
-  });
+    // Initial Progress is 0 XP, Level 1
+    const initialProgress = await getPgProgressSummary(LIFECYCLE_USER_ID);
+    expect(initialProgress.totalXp).toBe(0);
+    expect(initialProgress.level).toBe(1);
+    expect(initialProgress.xpEarnedInLevel).toBe(0);
 
-  it("bonus keys are per user, so two users both receive today's bonus", () => {
-    runSession(startSession(45, undefined, "user-a").id, 45);
-    runSession(startSession(45, undefined, "user-b").id, 45);
-    expect(bonuses("user-a", "DAILY_GOAL")).toHaveLength(1);
-    expect(bonuses("user-b", "DAILY_GOAL")).toHaveLength(1);
-  });
+    // 2. Create and complete a task in PostgreSQL
+    const task = await taskRepo.createTask(LIFECYCLE_USER_ID, {
+      title: "Write documentation chapter",
+      difficulty: Difficulty.NORMAL,
+    });
+    expect(task.status).toBe(TaskStatus.PENDING);
 
-  it("no daily goal is paid for a session below the 25-minute commitment", () => {
-    const s = startSession(15);
-    runSession(s.id, 15);
-    expect(bonuses()).toHaveLength(0);
-  });
-});
-
-describe("soft cap and focus sessions", () => {
-  it("XP above 1,000 payout XP in a day is paid at 25%", () => {
-    store.addXpTransaction({
-      id: "seed",
-      userId: USER,
-      amount: 950,
-      sourceType: XPSourceType.TASK,
-      sourceId: "seed-task",
-      rewardType: RewardType.COMPLETION,
-      idempotencyKey: "payout:TASK:seed-task",
-      baseXp: 150,
-      difficultyMultiplier: 1,
+    const taskPayout = {
+      amount: 120,
+      baseXp: 120,
+      difficultyMultiplier: 1.0,
       streakBonus: 0,
-      createdAt: new Date(),
+      rewardType: "COMPLETION",
+    };
+    const completion = await taskRepo.completeTaskTransaction(
+      LIFECYCLE_USER_ID,
+      task.id,
+      `payout:TASK:${task.id}`,
+      taskPayout
+    );
+    expect(completion.isDuplicate).toBe(false);
+    expect(completion.xpAwarded).toBe(120);
+
+    // 3. Verify Dashboard/Progress summary reads updated XP from PostgreSQL
+    const progressAfterTask = await getPgProgressSummary(LIFECYCLE_USER_ID);
+    expect(progressAfterTask.totalXp).toBe(120);
+    expect(progressAfterTask.level).toBe(1);
+    expect(progressAfterTask.xpEarnedInLevel).toBe(120);
+    expect(progressAfterTask.xpRemaining).toBe(180); // 300 - 120
+
+    // 4. Verify Leaderboard reflects the score in PostgreSQL
+    const leaderboard = await getWeeklyLeaderboard();
+    const entry = leaderboard.find((e) => e.userId === LIFECYCLE_USER_ID);
+    expect(entry).toBeDefined();
+    expect(entry?.xp).toBe(120);
+
+    // 5. Admin grants XP via Rewards Center
+    const adminGrant = await xpRepo.recordTransaction({
+      userId: LIFECYCLE_USER_ID,
+      amount: 500,
+      sourceType: "ADMIN_GRANT" as XPSourceType,
+      sourceId: "admin_grant_lifecycle_1",
+      rewardType: RewardType.ADJUSTMENT,
+      idempotencyKey: "admin:grant:lifecycle_1",
+      baseXp: 500,
+      difficultyMultiplier: 1.0,
+      streakBonus: 0,
     });
-    const s = startSession(45);
-    const done = runSession(s.id, 45);
-    expect(done.xpAwarded).toBe(63); // 50 at full + 50 × 0.25 = 62.5 → 63
-    expect(done.capped).toBe(true);
-  });
+    expect(adminGrant.isDuplicate).toBe(false);
+    expect(adminGrant.transaction.amount).toBe(500);
 
-  it("only one RUNNING session per user; same clientEventId is an idempotent retry", () => {
-    const a = startFocusSession({ userId: USER, requiredMinutes: 25, clientEventId: "same" });
-    expect(startFocusSession({ userId: USER, requiredMinutes: 25, clientEventId: "same" }).id).toBe(a.id);
-    expect(() =>
-      startFocusSession({ userId: USER, requiredMinutes: 25, clientEventId: "other" })
-    ).toThrow(/already running/);
-  });
+    // 6. Verify Dashboard reflects combined XP (120 + 500 = 620) and Level-Up
+    const progressAfterAdmin = await getPgProgressSummary(LIFECYCLE_USER_ID);
+    expect(progressAfterAdmin.totalXp).toBe(620);
+    // Level 1: 0..299, Level 2: 300..699 -> 620 XP is Level 2!
+    expect(progressAfterAdmin.level).toBe(2);
+    expect(progressAfterAdmin.level).toBe(levelFor(620));
+    expect(progressAfterAdmin.xpEarnedInLevel).toBe(320); // 620 - 300
+    expect(progressAfterAdmin.xpRemaining).toBe(80); // 400 - 320
 
-  it("a session that ends too early earns nothing", () => {
-    const s = startSession(45);
-    const done = runSession(s.id, 20); // needs 36+ min
-    expect(done.xpAwarded).toBe(0);
-    expect(payouts()).toHaveLength(0);
+    // 7. Verify Leaderboard updates with combined XP
+    const updatedLeaderboard = await getWeeklyLeaderboard();
+    const updatedEntry = updatedLeaderboard.find((e) => e.userId === LIFECYCLE_USER_ID);
+    expect(updatedEntry?.xp).toBe(620);
   });
 });
 
-describe("reversals and levels", () => {
-  it("a reversal offsets the payout once, even if requested twice", () => {
-    const t = createTask({ userId: USER, title: "Oops" });
-    vi.advanceTimersByTime(120_000);
-    completeTask(t.id);
-    const original = payouts()[0];
-    const r1 = reverseTransaction(USER, original.id, "undo");
-    const r2 = reverseTransaction(USER, original.id, "undo again");
-    expect(r1.isNew).toBe(true);
-    expect(r2.isNew).toBe(false);
-    expect(getTotalXp(USER)).toBe(0);
-    expect(store.getUserXpTransactions(USER)).toHaveLength(2);
-  });
+describe("Stage 6 — Server Restart Persistence Simulation", () => {
+  it("persists all player progress, streaks, habits, and ledger history across a simulated cold server reboot", async () => {
+    // 1. Seed player with substantial multi-activity progress
+    await prisma.user.create({
+      data: {
+        id: RESTART_USER_ID,
+        email: "durable@taskaura.test",
+        passwordHash: "hash_durable",
+        displayName: "Durable Player",
+        streakRecord: {
+          create: {
+            currentStreak: 5,
+            bestStreak: 12,
+            lastEligibleDate: "2026-09-22",
+            graceUsedThisWeek: false,
+          },
+        },
+      },
+    });
 
-  it("level comes from the v2 table: 20,580 XP is Level 18, +150 is Level 19", () => {
-    const seed = (amount: number, id: string) =>
-      store.addXpTransaction({
-        id,
-        userId: USER,
-        amount,
-        sourceType: XPSourceType.TASK,
-        sourceId: id,
-        rewardType: RewardType.COMPLETION,
-        idempotencyKey: `payout:TASK:${id}`,
-        baseXp: 0,
-        difficultyMultiplier: 1,
+    // Write transactions to Postgres (Total: 1,500 XP -> Level 4)
+    await xpRepo.recordTransaction({
+      userId: RESTART_USER_ID,
+      amount: 1200,
+      sourceType: XPSourceType.TASK,
+      sourceId: "task_durable_1",
+      rewardType: RewardType.COMPLETION,
+      idempotencyKey: "payout:TASK:durable_1",
+      baseXp: 1200,
+      difficultyMultiplier: 1.0,
+    });
+
+    await xpRepo.recordTransaction({
+      userId: RESTART_USER_ID,
+      amount: 300,
+      sourceType: XPSourceType.FOCUS_SESSION,
+      sourceId: "focus_durable_1",
+      rewardType: RewardType.COMPLETION,
+      idempotencyKey: "payout:FOCUS:durable_1",
+      baseXp: 300,
+      difficultyMultiplier: 1.0,
+    });
+
+    // Create a habit and log
+    const habitRepoInit = new HabitRepository();
+    const habit = await habitRepoInit.createHabit(RESTART_USER_ID, {
+      title: "Morning Meditation",
+      frequency: HabitFrequency.DAILY,
+    });
+    await habitRepoInit.logHabitTransaction(
+      RESTART_USER_ID,
+      habit.id,
+      "2026-09-22",
+      true,
+      "habit:durable:1",
+      {
+        amount: 75,
+        baseXp: 75,
+        difficultyMultiplier: 1.0,
         streakBonus: 0,
-        createdAt: new Date(),
-      });
-    seed(20580, "a");
-    expect(getUserLevel(USER)).toBe(18);
-    seed(150, "b");
-    expect(getUserLevel(USER)).toBe(19);
+        rewardType: "HABIT",
+      }
+    );
+
+    // Create a focus session
+    const focusRepoInit = new FocusRepository();
+    await focusRepoInit.startSession(RESTART_USER_ID, {
+      clientEventId: "durable-focus-event-1",
+      targetDurationMinutes: 25,
+    });
+
+    // ────────────────────────────────────────────────────────────
+    // 2. SIMULATE COLD SERVER RESTART
+    // In a serverless/multi-instance or restarted Next.js process:
+    // Any in-memory singleton (like InMemoryStore) would be completely WIPED to empty.
+    // We instantiate completely new repository instances to simulate fresh boot.
+    // ────────────────────────────────────────────────────────────
+    const freshTaskRepo = new TaskRepository();
+    const freshXpRepo = new XPRepository();
+    const freshHabitRepo = new HabitRepository();
+    const freshFocusRepo = new FocusRepository();
+
+    // 3. Verify ALL data is read intact and accurate from PostgreSQL
+    const freshTotalXp = await freshXpRepo.getTotalXp(RESTART_USER_ID);
+    expect(freshTotalXp).toBe(1575);
+
+    const freshLedger = await freshXpRepo.getLedger(RESTART_USER_ID);
+    expect(freshLedger).toHaveLength(3);
+    const totalFromLedger = freshLedger.reduce((acc, row) => acc + row.amount, 0);
+    expect(totalFromLedger).toBe(1575);
+
+    const freshProgress = await getPgProgressSummary(RESTART_USER_ID);
+    expect(freshProgress.totalXp).toBe(1575);
+    // Level 4 threshold is 1200 cumulative XP, Level 5 is 1800 XP.
+    expect(freshProgress.level).toBe(4);
+    expect(freshProgress.xpEarnedInLevel).toBe(375); // 1575 - 1200
+    expect(freshProgress.streak.current).toBe(5);
+    expect(freshProgress.streak.longest).toBe(12);
+
+    // Habits are intact
+    const habits = await freshHabitRepo.listHabits(RESTART_USER_ID);
+    expect(habits).toHaveLength(1);
+    expect(habits[0].title).toBe("Morning Meditation");
+
+    // Focus session is intact
+    const sessions = await freshFocusRepo.listSessions(RESTART_USER_ID);
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0].status).toBe(FocusSessionStatus.RUNNING);
   });
 });

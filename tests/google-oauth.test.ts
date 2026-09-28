@@ -70,7 +70,13 @@ describe("Phase D.1 — Google OAuth Authentication", () => {
 
   beforeAll(async () => {
     // Clean test accounts
-    const emails = [googleUserA.email, googleUserB.email, passwordUser.email, "unverified.user@taskaura.test"];
+    const emails = [
+      googleUserA.email,
+      googleUserB.email,
+      passwordUser.email,
+      "unverified.user@taskaura.test",
+      "verified.linking@taskaura.test",
+    ];
     const users = await prisma.user.findMany({ where: { email: { in: emails } } });
     const userIds = users.map((u) => u.id);
 
@@ -83,7 +89,13 @@ describe("Phase D.1 — Google OAuth Authentication", () => {
   });
 
   afterAll(async () => {
-    const emails = [googleUserA.email, googleUserB.email, passwordUser.email, "unverified.user@taskaura.test"];
+    const emails = [
+      googleUserA.email,
+      googleUserB.email,
+      passwordUser.email,
+      "unverified.user@taskaura.test",
+      "verified.linking@taskaura.test",
+    ];
     const users = await prisma.user.findMany({ where: { email: { in: emails } } });
     const userIds = users.map((u) => u.id);
 

@@ -77,9 +77,6 @@ export async function getAuthenticatedUser(
         return { id: token };
       }
     }
-
-    // Default fallback for test harness without cookies
-    return { id: DEMO_USER_ID };
   }
 
   // In production with no valid session, strictly deny access

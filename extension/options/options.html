@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TaskAura Focus Guard — Settings</title>
+  <link rel="stylesheet" href="options.css" />
+</head>
+<body>
+  <div class="page">
+    <header class="page-header">
+      <div class="logo-row">
+        <div class="logo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <div>
+          <h1 class="app-name">TaskAura Focus Guard</h1>
+          <p class="app-version">Version 1.0.0 · Chrome / Edge (Manifest V3)</p>
+        </div>
+      </div>
+    </header>
+
+    <main class="content">
+
+      <!-- App URL setting -->
+      <section class="section">
+        <h2 class="section-title">App Connection</h2>
+        <p class="section-desc">The URL where your TaskAura instance is running. Change this if you're self-hosting.</p>
+        <div class="input-row">
+          <input type="url" id="app-url-input" placeholder="http://localhost:3000" spellcheck="false" />
+          <button id="save-url-btn">Save</button>
+        </div>
+        <p class="save-status hidden" id="url-save-status">✓ Saved</p>
+      </section>
+
+      <!-- Status -->
+      <section class="section">
+        <h2 class="section-title">Extension Status</h2>
+        <div class="status-grid">
+          <div class="status-item">
+            <span class="status-label">Last poll</span>
+            <span class="status-value" id="last-poll">—</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">Active session</span>
+            <span class="status-value" id="active-session">—</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">Blocking active</span>
+            <span class="status-value" id="blocking-active">—</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">Domains blocked</span>
+            <span class="status-value" id="domains-count">—</span>
+          </div>
+          <div class="status-item" id="error-row" style="display:none">
+            <span class="status-label">Last error</span>
+            <span class="status-value error" id="last-error">—</span>
+          </div>
+        </div>
+        <button class="secondary-btn" id="force-poll-btn">Force refresh now</button>
+      </section>
+
+      <!-- How it works -->
+      <section class="section">
+        <h2 class="section-title">How It Works</h2>
+        <ol class="how-list">
+          <li>You add distraction domains to your blocklist (in the popup or here).</li>
+          <li>When you start a focus session in TaskAura, this extension detects it within 30 seconds via a background poll.</li>
+          <li>While your session is running, navigating to any blocked domain redirects you to a reminder page inside this extension.</li>
+          <li>When your session ends (completed or abandoned), blocking lifts automatically within 30 seconds.</li>
+          <li>Your blocklist is stored on the TaskAura server — it's the same across all browsers where you install this extension and log in with the same account.</li>
+        </ol>
+      </section>
+
+      <!-- Honest Bypass Limitations — prominently disclosed -->
+      <section class="section bypass-section">
+        <h2 class="section-title warning-title">⚠️ What This Tool Does Not Guarantee</h2>
+        <p class="bypass-intro">
+          This is a <strong>friction and commitment tool</strong>, not a technical lock.
+          Please read these limitations before relying on it for accountability:
+        </p>
+        <ul class="bypass-list">
+          <li>
+            <strong>You can disable or uninstall this extension at any time.</strong>
+            Browsers are under user control — no extension can prevent its own removal.
+            Uninstalling this extension mid-session has no effect on your XP or session outcome.
+          </li>
+          <li>
+            <strong>Blocking is per-browser.</strong>
+            Switching to a different browser, a private/incognito window where this extension is not active,
+            another device, or your phone bypasses the block entirely.
+          </li>
+          <li>
+            <strong>Your session XP is not affected by bypass.</strong>
+            XP eligibility is calculated entirely server-side based on when your session started
+            and how many heartbeats were recorded — independently of whether this extension was active,
+            disabled, or respected.
+          </li>
+          <li>
+            <strong>This extension is an enhancement, not a requirement.</strong>
+            Users who never install it can use focus sessions and earn XP normally.
+          </li>
+        </ul>
+        <p class="bypass-footer">
+          If you need stronger accountability, consider sharing your session goals with another person —
+          social accountability is more reliable than technical controls for this use case.
+        </p>
+      </section>
+
+      <!-- About -->
+      <section class="section">
+        <h2 class="section-title">About</h2>
+        <p class="about-text">
+          TaskAura Focus Guard is a companion extension for the TaskAura productivity app.
+          It is open source and its code can be inspected at any time from the Extensions menu → Manage Extensions → Source.
+          No data is collected beyond what your TaskAura account already stores.
+          Domains in your blocklist are stored on the TaskAura server, scoped to your account, and deleted when you remove them.
+        </p>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

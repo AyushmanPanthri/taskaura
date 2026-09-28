@@ -131,12 +131,14 @@ export interface Task {
   description: string | null;
   difficulty: Difficulty;
   status: TaskStatus;
-  dueAt: Date | null;
+  startedAt?: Date | null;
   completedAt: Date | null;
+  estimatedMinutes?: number | null;
+  completionAttempts?: number;
+  dueAt: Date | null;
   source: TaskSource;
   questId: string | null;
   createdAt: Date;
-  estimatedMinutes?: number | null;
 }
 
 /** §8 — Focus session */

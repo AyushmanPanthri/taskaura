@@ -1,11 +1,15 @@
 // ============================================================
 // Task Aura — /api/v1/habits/:id
-// PATCH: Update habit metadata or archive status
+// PATCH: Update habit metadata
+//
+// MIGRATION (Stage 3): Previously read/wrote to InMemoryStore.
+// Now uses habitRepository (Prisma) for durable PostgreSQL persistence.
 // ============================================================
 
 import { getAuthenticatedUser } from "@/lib/api/auth";
-import { apiError, apiSuccess } from "@/lib/api/response";
-import { updateHabit } from "@/lib/services/habit-service";
+import { apiError, apiSuccess, safeCatchError } from "@/lib/api/response";
+import { habitRepository } from "@/lib/repositories/habit-repository";
+import { HabitFrequency } from "@/lib/logic/types";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -21,15 +25,17 @@ export async function PATCH(req: Request, { params }: RouteParams) {
     const { id } = await params;
     const body = await req.json().catch(() => ({}));
 
-    const updated = updateHabit(user.id, id, {
+    const updated = await habitRepository.updateHabit(user.id, id, {
       title: body.title,
-      frequency: body.frequency,
+      frequency: body.frequency as HabitFrequency | undefined,
     });
 
+    if (!updated) {
+      return apiError("NOT_FOUND", "Habit not found", 404);
+    }
+
     return apiSuccess(updated);
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Failed to update habit";
-    const status = message.includes("not found") ? 404 : 400;
-    return apiError("BAD_REQUEST", message, status);
+  } catch (err) {
+    return safeCatchError(err);
   }
 }

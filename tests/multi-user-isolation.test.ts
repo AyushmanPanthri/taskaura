@@ -13,8 +13,8 @@ import { metricsRepository } from "../lib/repositories/metrics-repository";
 import { xpRepository } from "../lib/repositories/xp-repository";
 import { Difficulty, XPSourceType, RewardType } from "../lib/logic/types";
 
-const USER_A_ID = "user_isolation_alice";
-const USER_B_ID = "user_isolation_bob";
+const USER_A_ID = "44444444-4444-4444-8444-444444444444";
+const USER_B_ID = "55555555-5555-4555-8555-555555555555";
 
 describe("Phase D — Multi-User Data Isolation", () => {
   beforeAll(async () => {

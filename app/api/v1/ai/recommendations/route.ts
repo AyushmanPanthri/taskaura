@@ -1,13 +1,15 @@
 // ============================================================
 // Task Aura — POST /api/v1/ai/recommendations
 // Proposes a workload or habit recommendation (proposal only, no XP)
+//
+// MIGRATION (Stage 4): Migrated from InMemoryStore to PostgreSQL.
 // ============================================================
 
 import { getAuthenticatedUser } from "@/lib/api/auth";
 import { apiError, apiSuccess } from "@/lib/api/response";
-import { store } from "@/lib/services/store";
-import { buildAIContext, evaluateRules } from "@/lib/logic/ai-rules";
+import { evaluateRules } from "@/lib/logic/ai-rules";
 import { AIAction, Difficulty } from "@/lib/logic/types";
+import { getPostgresAIContext } from "@/lib/services/ai-service";
 
 export async function POST(req: Request) {
   try {
@@ -16,13 +18,7 @@ export async function POST(req: Request) {
       return apiError("UNAUTHORIZED", "Authentication required", 401);
     }
 
-    const metrics = store.getUserDailyMetrics(user.id);
-    const goals = store.getUserGoals(user.id);
-    const tasks = store.getUserTasks(user.id);
-    const totalXp = store.getTotalXp(user.id);
-    const streak = store.streakRecords.get(user.id)?.currentStreak ?? 0;
-
-    const context = buildAIContext(metrics, goals, tasks, totalXp, streak);
+    const { context } = await getPostgresAIContext(user.id);
     const rules = evaluateRules(context);
 
     const recRule = rules.find((r) => r.fired && r.action === AIAction.RECOMMENDATION);

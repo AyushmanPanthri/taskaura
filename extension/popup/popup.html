@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TaskAura Focus Guard</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="popup">
+    <!-- Header -->
+    <div class="header">
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      </div>
+      <div class="header-text">
+        <span class="app-name">Focus Guard</span>
+        <span class="app-sub">by TaskAura</span>
+      </div>
+      <div class="status-dot" id="status-dot" title="Status"></div>
+    </div>
+
+    <!-- Session status -->
+    <div class="session-banner" id="session-banner">
+      <div class="session-active hidden" id="session-active">
+        <div class="session-label">🟢 Session in progress</div>
+        <div class="session-remaining" id="session-remaining">—</div>
+      </div>
+      <div class="session-idle" id="session-idle">
+        <div class="session-label">No active focus session</div>
+        <div class="session-sub">Start a session in TaskAura to enable blocking.</div>
+      </div>
+    </div>
+
+    <!-- Auth status -->
+    <div class="auth-warning hidden" id="auth-warning">
+      <span>⚠️ Not signed in — open TaskAura to log in.</span>
+    </div>
+
+    <!-- Blocklist -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">Blocked Sites</span>
+        <span class="domain-count" id="domain-count">0 / 50</span>
+      </div>
+      <div class="domain-list" id="domain-list">
+        <p class="empty-state" id="empty-state">No sites blocked yet. Add domains below.</p>
+      </div>
+    </div>
+
+    <!-- Add domain -->
+    <div class="add-domain">
+      <input
+        type="text"
+        id="domain-input"
+        placeholder="e.g. reddit.com"
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <button id="add-btn" title="Add domain">+</button>
+    </div>
+    <div class="add-error hidden" id="add-error"></div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <button class="footer-btn" id="open-options">Settings &amp; About</button>
+      <button class="footer-btn" id="force-poll">Refresh ↺</button>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

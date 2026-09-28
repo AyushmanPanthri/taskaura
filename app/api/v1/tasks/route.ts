@@ -1,14 +1,16 @@
 // ============================================================
 // Task Aura — /api/v1/tasks
-// GET:  List user tasks
-// POST: Create a new task (server owns XP calculation & status)
+// GET:  List user tasks  (PostgreSQL — taskRepository)
+// POST: Create a new task (PostgreSQL — taskRepository)
+//
+// MIGRATION (Stage 3): Previously read/wrote to InMemoryStore.
+// Now uses taskRepository (Prisma) for durable PostgreSQL persistence.
 // ============================================================
 
 import { getAuthenticatedUser } from "@/lib/api/auth";
-import { apiError, apiSuccess } from "@/lib/api/response";
-import { store } from "@/lib/services/store";
-import { createTask } from "@/lib/services/task-service";
-import { Difficulty } from "@/lib/logic/types";
+import { apiError, apiSuccess, safeCatchError } from "@/lib/api/response";
+import { taskRepository } from "@/lib/repositories/task-repository";
+import { Difficulty, TaskStatus } from "@/lib/logic/types";
 
 export async function GET(req: Request) {
   try {
@@ -18,20 +20,13 @@ export async function GET(req: Request) {
     }
 
     const { searchParams } = new URL(req.url);
-    const statusFilter = searchParams.get("status");
+    const statusFilter = searchParams.get("status") as TaskStatus | null;
 
-    let tasks = store.getUserTasks(user.id);
-    if (statusFilter) {
-      tasks = tasks.filter((t) => t.status === statusFilter);
-    }
-
-    // Sort newest first
-    tasks.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    const tasks = await taskRepository.listTasks(user.id, statusFilter ? { status: statusFilter } : undefined);
 
     return apiSuccess(tasks);
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Failed to fetch tasks";
-    return apiError("INTERNAL_ERROR", message, 500);
+  } catch (err) {
+    return safeCatchError(err);
   }
 }
 
@@ -47,23 +42,32 @@ export async function POST(req: Request) {
       return apiError("INVALID_INPUT", "Task title is required", 400);
     }
 
-    // Client cannot provide: xp, rewardXp, totalXp, status, userId. Server owns all of them.
-    const difficulty = body.difficulty ? (body.difficulty.toUpperCase() as Difficulty) : Difficulty.NORMAL;
-    const estimatedMinutes = typeof body.estimatedMinutes === "number" ? body.estimatedMinutes : 30;
-    const dueAt = body.dueAt ? new Date(body.dueAt) : undefined;
+    const difficulty = body.difficulty
+      ? (body.difficulty.toUpperCase() as Difficulty)
+      : Difficulty.NORMAL;
 
-    const task = createTask({
-      userId: user.id,
+    const estimatedMinutes =
+      body.estimatedMinutes !== undefined && body.estimatedMinutes !== null
+        ? Number(body.estimatedMinutes)
+        : undefined;
+
+    const task = await taskRepository.createTask(user.id, {
       title: body.title.trim(),
-      description: body.description ? String(body.description).trim() : undefined,
+      description: body.description ? String(body.description).trim() : null,
       difficulty,
       estimatedMinutes,
-      dueAt,
+      dueAt: body.dueAt ? new Date(body.dueAt) : null,
     });
 
     return apiSuccess(task, 201);
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Failed to create task";
-    return apiError("BAD_REQUEST", message, 400);
+    const error = err as Error;
+    if (
+      error?.message?.includes("Daily task creation limit") ||
+      error?.message?.includes("require an estimated duration")
+    ) {
+      return apiError("INVALID_INPUT", error.message, 400);
+    }
+    return safeCatchError(err);
   }
 }

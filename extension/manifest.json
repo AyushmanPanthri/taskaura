@@ -1,0 +1,53 @@
+{
+  "manifest_version": 3,
+  "name": "TaskAura Focus Guard",
+  "version": "1.0.0",
+  "description": "Blocks distracting websites during your TaskAura focus sessions. A friction and commitment tool — not a technical lock.",
+  "author": "TaskAura",
+
+  "permissions": [
+    "declarativeNetRequest",
+    "declarativeNetRequestFeedback",
+    "storage",
+    "alarms",
+    "tabs"
+  ],
+
+  "host_permissions": [
+    "<all_urls>"
+  ],
+
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16":  "icons/icon16.png",
+      "48":  "icons/icon48.png",
+      "128": "icons/icon128.png"
+    },
+    "default_title": "TaskAura Focus Guard"
+  },
+
+  "options_page": "options/options.html",
+
+  "declarative_net_request": {
+    "rule_resources": []
+  },
+
+  "web_accessible_resources": [
+    {
+      "resources": ["blocked.html", "blocked.js", "blocked.css"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+
+  "icons": {
+    "16":  "icons/icon16.png",
+    "48":  "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

@@ -1,11 +1,20 @@
 // ============================================================
 // Task Aura — GET /api/v1/progress
 // Authoritative user progression endpoint
+//
+// FIX (2026-09): Switched from the in-memory store to the
+// PostgreSQL-authoritative progress service. The old service read
+// totalXp from an in-memory Map that is never updated by admin XP
+// grants (which write directly to the DB via xpRepository). This
+// caused admin-granted XP to be silently invisible on the player
+// dashboard, leaderboard, and level display despite a successful
+// DB write + audit log entry. The new service always aggregates
+// SUM(xp_transactions) from Prisma — the true source of truth.
 // ============================================================
 
 import { getAuthenticatedUser } from "@/lib/api/auth";
-import { apiError, apiSuccess } from "@/lib/api/response";
-import { getUserProgressSummary } from "@/lib/services/progress-service";
+import { apiError, apiSuccess, safeCatchError } from "@/lib/api/response";
+import { getPgProgressSummary } from "@/lib/services/pg-progress-service";
 
 export async function GET(req: Request) {
   try {
@@ -14,10 +23,9 @@ export async function GET(req: Request) {
       return apiError("UNAUTHORIZED", "Authentication required", 401);
     }
 
-    const progress = getUserProgressSummary(user.id);
+    const progress = await getPgProgressSummary(user.id);
     return apiSuccess(progress);
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Failed to fetch progress";
-    return apiError("INTERNAL_ERROR", message, 500);
+  } catch (err) {
+    return safeCatchError(err);
   }
 }

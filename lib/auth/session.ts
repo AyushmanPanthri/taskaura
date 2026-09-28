@@ -9,6 +9,7 @@ export interface SessionUser {
   email: string | null;
   displayName: string;
   name?: string | null;
+  avatar?: string | null;
   isGuest?: boolean;
   role?: "USER" | "ADMIN";
   timezone?: string;
@@ -43,6 +44,7 @@ export async function validateSession(token: string): Promise<SessionUser | null
             id: true,
             email: true,
             displayName: true,
+            avatar: true,
             isGuest: true,
             role: true,
           },
@@ -66,6 +68,7 @@ export async function validateSession(token: string): Promise<SessionUser | null
       email: session.user.email,
       displayName: name,
       name,
+      avatar: session.user.avatar || "🧑‍💻",
       isGuest: session.user.isGuest,
       role: (session.user.role as "USER" | "ADMIN") || "USER",
       timezone: "UTC",

@@ -11,7 +11,7 @@ import { userRepository } from "../lib/repositories/user-repository";
 import { reconcileUserProgress } from "../lib/services/reconciliation-service";
 import { XPSourceType, RewardType } from "../lib/logic/types";
 
-const RECON_USER_ID = "user_test_reconciliation";
+const RECON_USER_ID = "22222222-2222-4222-8222-222222222222";
 
 describe("Phase D — Progress Reconciliation & Source-of-Truth Integrity", () => {
   beforeAll(async () => {
