@@ -80,8 +80,8 @@ export default function TasksPage() {
       if (json.success) {
         if (json.data.xpAwarded > 0) {
           triggerXpToast(json.data.xpAwarded, `Completed: ${json.data.task.title}`);
-          // Fire quest-complete celebration only after server confirms a quest task.
-          if (json.data.task.questId) {
+          // Fire quest-complete celebration only after server confirms a quest task and not duplicate.
+          if (json.data.task.questId && !json.data.isDuplicate) {
             triggerQuestCelebration();
           }
         }

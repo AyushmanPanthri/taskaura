@@ -11,6 +11,27 @@ import React from "react";
 import { render, screen, fireEvent, act, cleanup } from "@testing-library/react";
 import { describe, it, expect, afterEach, vi, beforeEach } from "vitest";
 import { CelebrationOverlay } from "../components/CelebrationOverlay";
+import { AppShell } from "../components/AppShell";
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/tasks",
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    refresh: vi.fn(),
+  }),
+}));
+
+vi.mock("next/image", () => ({
+  default: ({
+    priority: _priority,
+    ...props
+  }: React.ImgHTMLAttributes<HTMLImageElement> & { priority?: boolean }) => {
+    void _priority;
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img {...props} alt={props.alt ?? ""} />;
+  },
+}));
 
 // ── Helpers ─────────────────────────────────────────────────
 
@@ -30,6 +51,11 @@ beforeEach(() => {
     writable: true,
     value: vi.fn(),
   });
+  global.fetch = vi.fn().mockImplementation(() =>
+    Promise.resolve({
+      json: () => Promise.resolve({ success: true, data: { level: 1 } }),
+    })
+  ) as unknown as typeof fetch;
   vi.useFakeTimers();
 });
 
@@ -136,31 +162,77 @@ describe("CelebrationOverlay", () => {
   });
 });
 
-// ── prefers-reduced-motion guard (tested at the AppShell event level) ─────
-// The CelebrationOverlay itself always renders when kind is non-null.
-// The guard lives in AppShell.tsx where setCelebration is called only when
-// motionOk() is true. We test that the overlay is NOT shown when
-// prefers-reduced-motion is set by verifying the guard logic in isolation.
+// ── prefers-reduced-motion guard (tested by rendering real AppShell) ───────
 
-describe("prefers-reduced-motion guard", () => {
-  it("skips setting celebration kind when prefers-reduced-motion: reduce", () => {
-    // Simulate the AppShell motionOk() guard.
-    const mockMql = { matches: true }; // matches = true means "reduce"
+describe("prefers-reduced-motion guard in AppShell", () => {
+  it("skips overlay for level-up and quest-complete when prefers-reduced-motion: reduce", () => {
+    const mockMql = {
+      matches: true,
+      media: "(prefers-reduced-motion: reduce)",
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    };
     window.matchMedia = vi.fn().mockReturnValue(mockMql as unknown as MediaQueryList);
 
-    const motionOk = () =>
-      !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    render(
+      <AppShell>
+        <div>Page Content</div>
+      </AppShell>
+    );
 
-    expect(motionOk()).toBe(false); // motion is NOT ok → skip video
+    act(() => {
+      window.dispatchEvent(new CustomEvent("taskaura:level-up"));
+    });
+    expect(screen.queryByTestId("celebration-overlay")).toBeNull();
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent("taskaura:quest-complete"));
+    });
+    expect(screen.queryByTestId("celebration-overlay")).toBeNull();
   });
 
-  it("allows celebration when prefers-reduced-motion is not set", () => {
-    const mockMql = { matches: false }; // matches = false means motion is fine
+  it("shows overlay for level-up and quest-complete when prefers-reduced-motion is not set", () => {
+    const mockMql = {
+      matches: false,
+      media: "(prefers-reduced-motion: reduce)",
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    };
     window.matchMedia = vi.fn().mockReturnValue(mockMql as unknown as MediaQueryList);
 
-    const motionOk = () =>
-      !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    render(
+      <AppShell>
+        <div>Page Content</div>
+      </AppShell>
+    );
 
-    expect(motionOk()).toBe(true); // motion IS ok → show video
+    act(() => {
+      window.dispatchEvent(new CustomEvent("taskaura:level-up"));
+    });
+    const levelOverlay = screen.getByTestId("celebration-overlay");
+    expect(levelOverlay).toBeInTheDocument();
+    expect(levelOverlay).toHaveAttribute("data-kind", "level-up");
+
+    // Dismiss level-up before testing quest-complete
+    fireEvent.click(levelOverlay);
+    act(() => {
+      vi.advanceTimersByTime(350);
+    });
+    expect(screen.queryByTestId("celebration-overlay")).toBeNull();
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent("taskaura:quest-complete"));
+    });
+    const questOverlay = screen.getByTestId("celebration-overlay");
+    expect(questOverlay).toBeInTheDocument();
+    expect(questOverlay).toHaveAttribute("data-kind", "quest-complete");
   });
 });
