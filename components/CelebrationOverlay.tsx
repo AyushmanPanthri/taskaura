@@ -23,16 +23,26 @@
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
 
-export type CelebrationKind = "level-up" | "quest-complete";
+export type CelebrationKind = "level-up" | "quest-complete" | "task-complete" | "habit-complete";
 
 interface Props {
   kind: CelebrationKind | null;
   onDismiss: () => void;
 }
 
-const VIDEO_SRC: Record<CelebrationKind, string> = {
-  "level-up": "/celebrations/level-up.mp4",
+// ── VIDEO SLOT MAP ──────────────────────────────────────────
+// One place to control which video plays for each celebration
+// event.  To swap a video, change the path here — no other
+// file needs editing.
+//
+// TEMP: "task-complete" and "habit-complete" reuse the two
+//       existing clips until dedicated assets are ready.
+// ─────────────────────────────────────────────────────────────
+export const VIDEO_SLOTS: Record<CelebrationKind, string> = {
+  "level-up":       "/celebrations/level-up.mp4",
   "quest-complete": "/celebrations/quest-complete.mp4",
+  "task-complete":  "/celebrations/level-up.mp4",     // TEMP: reuse level-up clip
+  "habit-complete": "/celebrations/quest-complete.mp4", // TEMP: reuse quest-complete clip
 };
 
 // How long the overlay stays at full opacity before the fade begins (ms).
@@ -136,16 +146,14 @@ export function CelebrationOverlay({ kind, onDismiss }: Props) {
         onClick={dismiss}
         role="dialog"
         aria-modal="true"
-        aria-label={
-          kind === "level-up" ? "Level Up celebration" : "Quest Complete celebration"
-        }
+        aria-label={`${kind} celebration`}
       >
         <video
           ref={videoRef}
           id="celebration-video"
           data-testid="celebration-video"
           className="celebration-video"
-          src={VIDEO_SRC[kind]}
+          src={VIDEO_SLOTS[kind]}
           autoPlay
           muted
           playsInline

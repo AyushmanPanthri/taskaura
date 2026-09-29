@@ -7,7 +7,7 @@
 // ============================================================
 
 import React, { useState, useEffect, useCallback } from "react";
-import { triggerXpToast } from "@/components/AppShell";
+import { triggerXpToast, triggerCelebration } from "@/components/AppShell";
 import { EmptyState, ErrorState } from "@/components/States";
 import type { HabitWithTodayStatus } from "@/lib/services/habit-service";
 import { HabitFrequency } from "@/lib/logic/types";
@@ -71,6 +71,11 @@ export default function HabitsPage() {
         if (json.data.xpAwarded > 0) {
           triggerXpToast(json.data.xpAwarded, "Habit Completed");
         }
+        // TEMP: Always play a celebration video on every habit completion
+        // for demo reliability.  Remove this unconditional trigger and
+        // restore xpAwarded conditions once per-event video selection
+        // is implemented.
+        triggerCelebration("habit-complete");
         await fetchHabits();
       }
     } catch {

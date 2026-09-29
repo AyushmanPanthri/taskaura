@@ -117,6 +117,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       if (motionOk()) setCelebration("quest-complete");
     };
 
+    // Task-complete celebration
+    const onTaskComplete = () => {
+      if (motionOk()) setCelebration("task-complete");
+    };
+
+    // Habit-complete celebration
+    const onHabitComplete = () => {
+      if (motionOk()) setCelebration("habit-complete");
+    };
+
     // Listen for profile update events
     const onProfileUpdated = () => {
       void loadProfile();
@@ -126,6 +136,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     window.addEventListener("taskaura:profile-updated", onProfileUpdated);
     window.addEventListener("taskaura:level-up", onLevelUp);
     window.addEventListener("taskaura:quest-complete", onQuestComplete);
+    window.addEventListener("taskaura:task-complete", onTaskComplete);
+    window.addEventListener("taskaura:habit-complete", onHabitComplete);
 
     return () => {
       cancelled = true;
@@ -133,6 +145,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       window.removeEventListener("taskaura:profile-updated", onProfileUpdated);
       window.removeEventListener("taskaura:level-up", onLevelUp);
       window.removeEventListener("taskaura:quest-complete", onQuestComplete);
+      window.removeEventListener("taskaura:task-complete", onTaskComplete);
+      window.removeEventListener("taskaura:habit-complete", onHabitComplete);
     };
   }, [pathname]);
 
@@ -393,5 +407,17 @@ export function triggerXpToast(amount: number, label: string) {
 export function triggerQuestCelebration() {
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("taskaura:quest-complete"));
+  }
+}
+
+/**
+ * Generic celebration trigger — fires a named video-slot celebration.
+ * The slot name must match a key in VIDEO_SLOTS (CelebrationOverlay).
+ * Callers pass the slot name; AppShell picks up the event and shows
+ * the corresponding video.
+ */
+export function triggerCelebration(slot: CelebrationKind) {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(`taskaura:${slot}`));
   }
 }

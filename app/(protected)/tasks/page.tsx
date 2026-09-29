@@ -7,7 +7,7 @@
 // ============================================================
 
 import React, { useState, useEffect, useCallback } from "react";
-import { triggerXpToast, triggerQuestCelebration } from "@/components/AppShell";
+import { triggerXpToast, triggerCelebration } from "@/components/AppShell";
 import { AiProposalCard } from "@/components/AiProposalCard";
 import { EmptyState, ErrorState } from "@/components/States";
 import type { Task, Difficulty } from "@/lib/logic/types";
@@ -80,11 +80,12 @@ export default function TasksPage() {
       if (json.success) {
         if (json.data.xpAwarded > 0) {
           triggerXpToast(json.data.xpAwarded, `Completed: ${json.data.task.title}`);
-          // Fire quest-complete celebration only after server confirms a quest task and not duplicate.
-          if (json.data.task.questId && !json.data.isDuplicate) {
-            triggerQuestCelebration();
-          }
         }
+        // TEMP: Always play a celebration video on every task completion
+        // for demo reliability.  Remove this unconditional trigger and
+        // restore the original xpAwarded / questId conditions once
+        // per-event video selection is implemented.
+        triggerCelebration("task-complete");
         await fetchTasks();
       }
     } catch {
