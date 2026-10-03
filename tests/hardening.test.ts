@@ -167,44 +167,44 @@ describe("XP Formula & Worked Examples (§9.2)", () => {
     expect(raw).toBe(100);
   });
 
-  it("Worked Example 2: 45-min AI quest linked session = 150 XP", () => {
+  it("Worked Example 2: 45-min AI quest linked session = 225 XP", () => {
     const { raw } = computeRawXp({
       kind: "AI_QUEST",
       minutes: 45,
       difficulty: "NORMAL",
       verification: "FOCUS_VERIFIED",
     });
-    expect(raw).toBe(150);
+    expect(raw).toBe(225);
   });
 
-  it("Worked Example 3: 30-min normal self-confirmed task = 120 XP", () => {
+  it("Worked Example 3: 30-min normal self-confirmed task = 75 XP", () => {
     const { raw } = computeRawXp({
       kind: "TASK",
       minutes: 30,
       difficulty: "NORMAL",
       verification: "SELF_CONFIRMED",
     });
-    expect(raw).toBe(120);
+    expect(raw).toBe(75);
   });
 
-  it("Worked Example 4: 5-min easy self-confirmed task (clamp floor 0.4) = 38 XP", () => {
+  it("Worked Example 4: 5-min easy self-confirmed task (clamp floor 0.4) = 24 XP", () => {
     const { raw } = computeRawXp({
       kind: "TASK",
       minutes: 5,
       difficulty: "EASY",
       verification: "SELF_CONFIRMED",
     });
-    expect(raw).toBe(38);
+    expect(raw).toBe(24);
   });
 
-  it("Worked Example 5: 60-min hard linked task (clamp ceiling 1.5) = 281 XP", () => {
+  it("Worked Example 5: 60-min hard linked task (clamp ceiling 1.5) = 422 XP", () => {
     const { raw } = computeRawXp({
       kind: "TASK",
       minutes: 60,
       difficulty: "HARD",
       verification: "FOCUS_VERIFIED",
     });
-    expect(raw).toBe(281);
+    expect(raw).toBe(422);
   });
 
   it("Worked Example 6: Daily soft cap (950 earned, 200 raw) = 88 XP", () => {
@@ -247,7 +247,7 @@ describe("XP Formula & Worked Examples (§9.2)", () => {
         difficulty: "INVALID_TIER",
         verification: "SELF_CONFIRMED",
       });
-      expect(raw).toBe(120); // normal 150 * 1.0 * 1.0 * 0.8 = 120
+      expect(raw).toBe(75); // normal 150 * 1.0 * 1.0 * 0.5 = 75
     });
 
     it("rejects invalid verification mode and awards 0 XP", () => {

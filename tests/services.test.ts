@@ -291,4 +291,31 @@ describe("Stage 6 — Server Restart Persistence Simulation", () => {
     expect(sessions).toHaveLength(1);
     expect(sessions[0].status).toBe(FocusSessionStatus.RUNNING);
   });
+
+  afterAll(async () => {
+    await prisma.xPTransaction.deleteMany({
+      where: { userId: RESTART_USER_ID },
+    });
+    await prisma.task.deleteMany({
+      where: { userId: RESTART_USER_ID },
+    });
+    await prisma.focusSession.deleteMany({
+      where: { userId: RESTART_USER_ID },
+    });
+    await prisma.habitLog.deleteMany({
+      where: { habit: { userId: RESTART_USER_ID } },
+    });
+    await prisma.habit.deleteMany({
+      where: { userId: RESTART_USER_ID },
+    });
+    await prisma.streakRecord.deleteMany({
+      where: { userId: RESTART_USER_ID },
+    });
+    await prisma.weeklyScore.deleteMany({
+      where: { userId: RESTART_USER_ID },
+    });
+    await prisma.user.deleteMany({
+      where: { id: RESTART_USER_ID },
+    });
+  });
 });

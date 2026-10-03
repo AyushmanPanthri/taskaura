@@ -192,14 +192,14 @@ describe("Leveling System Audit Suite (Phase 2)", () => {
     expect(summaryMid.xpEarnedInLevel).toBe(250);
     expect(summaryMid.xpRemaining).toBe(250);
 
-    // 2. Complete 30m NORMAL task (normally 120 XP, but capped to remaining 50 XP)
+    // 2. Complete 45m NORMAL task (normally 113 raw XP, ramp-up 56 XP, capped to remaining 50 XP)
     const task = await taskRepository.createTask(TEST_USER, {
       title: "Capped Mid-day Task",
-      estimatedMinutes: 30,
+      estimatedMinutes: 45,
     });
     await prisma.task.update({
       where: { id: task.id },
-      data: { status: TaskStatus.IN_PROGRESS, startedAt: new Date(Date.now() - 30 * 60_000) },
+      data: { status: TaskStatus.IN_PROGRESS, startedAt: new Date(Date.now() - 45 * 60_000) },
     });
 
     const res = await completeTaskRoute(
@@ -241,7 +241,7 @@ describe("Leveling System Audit Suite (Phase 2)", () => {
       });
     }
 
-    // Complete another 30m task on the new day: full 120 XP contributes
+    // Complete another 30m task on the new day: full 75 XP contributes
     const nextDayTask = await taskRepository.createTask(TEST_USER, {
       title: "Next Day Task",
       estimatedMinutes: 30,
@@ -256,15 +256,15 @@ describe("Leveling System Audit Suite (Phase 2)", () => {
       { params: Promise.resolve({ id: nextDayTask.id }) }
     );
     const jsonNextDay = await resNextDay.json();
-    expect(jsonNextDay.data.xpAwarded).toBe(120);
+    expect(jsonNextDay.data.xpAwarded).toBe(75);
 
-    // Resumed progress accurately totals 1,620 XP (1000 + 500 + 120)
+    // Resumed progress accurately totals 1,575 XP (1000 + 500 + 75)
     // Level 4 threshold is 1200, span is 600
     const summaryNextDay = await getPgProgressSummary(TEST_USER);
-    expect(summaryNextDay.totalXp).toBe(1620);
+    expect(summaryNextDay.totalXp).toBe(1575);
     expect(summaryNextDay.level).toBe(4);
-    expect(summaryNextDay.xpEarnedInLevel).toBe(420);
-    expect(summaryNextDay.xpRemaining).toBe(180);
+    expect(summaryNextDay.xpEarnedInLevel).toBe(375);
+    expect(summaryNextDay.xpRemaining).toBe(225);
   });
 
   // ── 7. MULTI-LEVEL BOUNDARY REVERSAL ─────────────────────────

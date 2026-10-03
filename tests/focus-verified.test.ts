@@ -40,15 +40,19 @@ async function seedFocusSession(overrides: {
   consumedAt?: Date | null;
   heartbeatCount?: number;
   expectedHeartbeats?: number;
+  actualMinutes?: number;
+  requiredMinutes?: number;
 }) {
+  const requiredMinutes = overrides.requiredMinutes ?? 25;
+  const actualMinutes = overrides.actualMinutes ?? 25;
   return prisma.focusSession.create({
     data: {
       clientEventId: crypto.randomUUID(),
       userId: overrides.userId,
       taskId: overrides.taskId ?? null,
       status: overrides.status ?? FocusSessionStatus.COMPLETED,
-      requiredMinutes: 25,
-      actualMinutes: 25,
+      requiredMinutes,
+      actualMinutes,
       startedAt: new Date(Date.now() - 30 * 60_000),
       completedAt: overrides.completedAt ?? new Date(),
       consumedAt: overrides.consumedAt ?? null,
@@ -141,11 +145,11 @@ describe("Focus-Verified Task Completion", () => {
     expect(json.data.rejected).toBe(false);
     expect(json.data.task.status).toBe(TaskStatus.COMPLETED);
     // Exact expected XP computed from economy.ts:
-    // base (150) * effort (10m/30m = 0.33 clamped to effortMin 0.4) * difficulty (1.0 NORMAL) * verification (1.0 FOCUS_VERIFIED) = 60 XP.
-    // Under SELF_CONFIRMED (0.8 multiplier), identical task earns 150 * 0.4 * 1.0 * 0.8 = 48 XP.
-    // Focus-verified (60 XP) is strictly greater than self-confirmed (48 XP).
-    expect(json.data.xpAwarded).toBe(60);
-    expect(json.data.xpAwarded).toBeGreaterThan(48);
+    // base (150) * effort (10m/30m = 0.33 clamped to effortMin 0.4) * difficulty (1.0 NORMAL) * verification (1.5 FOCUS_VERIFIED) = 90 XP.
+    // Under SELF_CONFIRMED (0.5 multiplier), identical task earns raw 150 * 0.4 * 1.0 * 0.5 = 30 XP (and with first-5 reduction: 15 XP).
+    // Focus-verified (90 XP) is strictly greater than self-confirmed (15 XP).
+    expect(json.data.xpAwarded).toBe(90);
+    expect(json.data.xpAwarded).toBeGreaterThan(15);
 
     // Verify the session was consumed (consumedAt set)
     const session = await prisma.focusSession.findFirst({
@@ -337,4 +341,151 @@ describe("Focus-Verified Task Completion", () => {
     const res = await startFocusRoute(req);
     expect(res.status).toBe(400);
   });
+
+  // ── Phase F: bypass-prevention tests ─────────────────────
+
+  // F-a: session with actualMinutes 0 does NOT grant FOCUS_VERIFIED
+  it("F-a. session with actualMinutes 0 gives SELF_CONFIRMED", async () => {
+    const task = await seedReadyTask(USER_A);
+    await seedFocusSession({
+      userId: USER_A,
+      taskId: task.id,
+      status: FocusSessionStatus.COMPLETED,
+      completedAt: new Date(Date.now() - 5 * 60_000),
+      consumedAt: null,
+      actualMinutes: 0,
+      requiredMinutes: 25,
+      heartbeatCount: 0,
+      expectedHeartbeats: 50,
+    });
+
+    const req = makeReq(
+      `/api/v1/tasks/${task.id}/complete`,
+      "POST",
+      {},
+      { "x-user-id": USER_A }
+    );
+    const res = await completeTaskRoute(req, {
+      params: Promise.resolve({ id: task.id }),
+    });
+    expect(res.status).toBe(200);
+    const audit = await prisma.adminAuditLog.findFirst({
+      where: { targetUserId: USER_A, action: "TASK_COMPLETED" },
+    });
+    const meta = JSON.parse(audit!.metadata);
+    expect(meta.verificationType).toBe("SELF_CONFIRMED");
+  });
+
+  // F-b: session where focusCreditedMinutes(actual, planned) === 0 does NOT grant FOCUS_VERIFIED
+  // actualMinutes 5, requiredMinutes 25: threshold = max(10, 0.8*25=20) → 5 < 20 → credited = 0
+  // Heartbeats are 10/10 (ratio 1.0, not capped) so that only creditedMinutes guards it.
+  it("F-b. session where credited minutes is 0 gives SELF_CONFIRMED", async () => {
+    const task = await seedReadyTask(USER_A);
+    await seedFocusSession({
+      userId: USER_A,
+      taskId: task.id,
+      status: FocusSessionStatus.COMPLETED,
+      completedAt: new Date(Date.now() - 5 * 60_000),
+      consumedAt: null,
+      actualMinutes: 5,
+      requiredMinutes: 25,
+      heartbeatCount: 10,
+      expectedHeartbeats: 10,
+    });
+
+    const req = makeReq(
+      `/api/v1/tasks/${task.id}/complete`,
+      "POST",
+      {},
+      { "x-user-id": USER_A }
+    );
+    const res = await completeTaskRoute(req, {
+      params: Promise.resolve({ id: task.id }),
+    });
+    expect(res.status).toBe(200);
+    const audit = await prisma.adminAuditLog.findFirst({
+      where: { targetUserId: USER_A, action: "TASK_COMPLETED" },
+    });
+    const meta = JSON.parse(audit!.metadata);
+    expect(meta.verificationType).toBe("SELF_CONFIRMED");
+  });
+
+  // F-c: session that shouldCapXp() would cap does NOT grant FOCUS_VERIFIED
+  // actualMinutes 25, heartbeatCount 5, expectedHeartbeats 50: ratio = 5/50 = 0.1 < 0.6 → capped
+  it("F-c. heartbeat-capped session gives SELF_CONFIRMED", async () => {
+    const task = await seedReadyTask(USER_A);
+    await seedFocusSession({
+      userId: USER_A,
+      taskId: task.id,
+      status: FocusSessionStatus.COMPLETED,
+      completedAt: new Date(Date.now() - 5 * 60_000),
+      consumedAt: null,
+      actualMinutes: 25,
+      requiredMinutes: 25,
+      heartbeatCount: 5,
+      expectedHeartbeats: 50,
+    });
+
+    const req = makeReq(
+      `/api/v1/tasks/${task.id}/complete`,
+      "POST",
+      {},
+      { "x-user-id": USER_A }
+    );
+    const res = await completeTaskRoute(req, {
+      params: Promise.resolve({ id: task.id }),
+    });
+    expect(res.status).toBe(200);
+    const audit = await prisma.adminAuditLog.findFirst({
+      where: { targetUserId: USER_A, action: "TASK_COMPLETED" },
+    });
+    const meta = JSON.parse(audit!.metadata);
+    expect(meta.verificationType).toBe("SELF_CONFIRMED");
+  });
+
+  // F-d: focus/start requiredMinutes range enforcement
+  it("F-d. focus/start rejects requiredMinutes below focusPlannedMinMinutes (5)", async () => {
+    const req = makeReq(
+      "/api/v1/focus/start",
+      "POST",
+      { requiredMinutes: 4, clientEventId: crypto.randomUUID() },
+      { "x-user-id": USER_A }
+    );
+    const res = await startFocusRoute(req);
+    expect(res.status).toBe(400);
+  });
+
+  it("F-d. focus/start rejects requiredMinutes above focusPlannedMaxMinutes (180)", async () => {
+    const req = makeReq(
+      "/api/v1/focus/start",
+      "POST",
+      { requiredMinutes: 181, clientEventId: crypto.randomUUID() },
+      { "x-user-id": USER_A }
+    );
+    const res = await startFocusRoute(req);
+    expect(res.status).toBe(400);
+  });
+
+  it("F-d. focus/start rejects non-integer requiredMinutes", async () => {
+    const req = makeReq(
+      "/api/v1/focus/start",
+      "POST",
+      { requiredMinutes: 25.5, clientEventId: crypto.randomUUID() },
+      { "x-user-id": USER_A }
+    );
+    const res = await startFocusRoute(req);
+    expect(res.status).toBe(400);
+  });
+
+  it("F-d. focus/start rejects NaN requiredMinutes", async () => {
+    const req = makeReq(
+      "/api/v1/focus/start",
+      "POST",
+      { requiredMinutes: NaN, clientEventId: crypto.randomUUID() },
+      { "x-user-id": USER_A }
+    );
+    const res = await startFocusRoute(req);
+    expect(res.status).toBe(400);
+  });
 });
+

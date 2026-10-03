@@ -534,14 +534,14 @@ describe("Task Completion Integrity & Anti-XP-Farming Suite", () => {
         },
       });
 
-      // Complete a 30m task (normally 120 XP, but only 50 room left in 1000 cap)
+      // Complete a 45m task (normally 113 raw XP, ramp-up 56 XP, but only 50 room left in 1000 cap)
       const task = await taskRepository.createTask(TEST_USER_A, {
         title: "Capped Task",
-        estimatedMinutes: 30,
+        estimatedMinutes: 45,
       });
       await prisma.task.update({
         where: { id: task.id },
-        data: { status: TaskStatus.IN_PROGRESS, startedAt: new Date(Date.now() - 30 * 60_000) },
+        data: { status: TaskStatus.IN_PROGRESS, startedAt: new Date(Date.now() - 45 * 60_000) },
       });
 
       const res = await completeTaskRoute(
@@ -556,7 +556,7 @@ describe("Task Completion Integrity & Anti-XP-Farming Suite", () => {
   // ── 22. FIRST-FIVE SELF-CONFIRMED TASK RULE ──────────────────
   describe("22. First-Five Lifetime SELF_CONFIRMED Rule", () => {
     it("pays 50% XP (floor 1) for first 5 self-confirmed completions, full XP for 6th+", () => {
-      // 30 min NORMAL self-confirmed = 120 raw XP
+      // 30 min NORMAL self-confirmed = 75 raw XP
       const first = calculateTaskRewardAuthoritative({
         minutes: 30,
         difficulty: "NORMAL",
@@ -564,7 +564,7 @@ describe("Task Completion Integrity & Anti-XP-Farming Suite", () => {
         lifetimeSelfConfirmedCount: 0, // 1st completion
       });
       expect(first.isReducedNewUser).toBe(true);
-      expect(first.finalXp).toBe(60); // 50% of 120
+      expect(first.finalXp).toBe(37); // 50% of 75
 
       const fifth = calculateTaskRewardAuthoritative({
         minutes: 30,
@@ -573,7 +573,7 @@ describe("Task Completion Integrity & Anti-XP-Farming Suite", () => {
         lifetimeSelfConfirmedCount: 4, // 5th completion
       });
       expect(fifth.isReducedNewUser).toBe(true);
-      expect(fifth.finalXp).toBe(60);
+      expect(fifth.finalXp).toBe(37);
 
       const sixth = calculateTaskRewardAuthoritative({
         minutes: 30,
@@ -582,7 +582,7 @@ describe("Task Completion Integrity & Anti-XP-Farming Suite", () => {
         lifetimeSelfConfirmedCount: 5, // 6th completion
       });
       expect(sixth.isReducedNewUser).toBe(false);
-      expect(sixth.finalXp).toBe(120); // Full 120 XP
+      expect(sixth.finalXp).toBe(75); // Full 75 XP
     });
 
     it("FOCUS_VERIFIED completions are exempt from the 50% reduction", () => {
@@ -593,7 +593,7 @@ describe("Task Completion Integrity & Anti-XP-Farming Suite", () => {
         lifetimeSelfConfirmedCount: 0, // Brand new user
       });
       expect(verified.isReducedNewUser).toBe(false);
-      expect(verified.finalXp).toBe(150); // Full 150 XP for verified
+      expect(verified.finalXp).toBe(225); // Full 225 XP for verified
     });
   });
 

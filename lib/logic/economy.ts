@@ -19,7 +19,7 @@ export const ECONOMY = {
   effortMin: 0.4,
   effortMax: 1.5,
   difficulty: { EASY: 0.8, NORMAL: 1.0, HARD: 1.25, EPIC: 1.5 },
-  verification: { FOCUS_VERIFIED: 1.0, SELF_CONFIRMED: 0.8 },
+  verification: { FOCUS_VERIFIED: 1.5, SELF_CONFIRMED: 0.5 },
   /** User-chosen HARD / EPIC only count for longer work. */
   hardMinMinutes: 45,
   epicMinMinutes: 90,

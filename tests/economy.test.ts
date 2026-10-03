@@ -57,25 +57,25 @@ describe("XP formula (Logic File §9.2 examples)", () => {
   it("standalone 45-min session = 100", () => {
     expect(computeRawXp({ kind: "FOCUS_SESSION", minutes: 45 }).raw).toBe(100);
   });
-  it("AI quest 45 min NORMAL verified = 150", () => {
+  it("AI quest 45 min NORMAL verified = 225", () => {
     expect(
       computeRawXp({ kind: "AI_QUEST", minutes: 45, verification: "FOCUS_VERIFIED" }).raw
-    ).toBe(150);
+    ).toBe(225);
   });
-  it("task 30 min NORMAL self-confirmed = 120", () => {
+  it("task 30 min NORMAL self-confirmed = 75", () => {
     expect(
       computeRawXp({ kind: "TASK", minutes: 30, verification: "SELF_CONFIRMED" }).raw
-    ).toBe(120);
+    ).toBe(75);
   });
-  it("task 5 min EASY self-confirmed = 38", () => {
+  it("task 5 min EASY self-confirmed = 24", () => {
     expect(
       computeRawXp({ kind: "TASK", minutes: 5, difficulty: "EASY", verification: "SELF_CONFIRMED" }).raw
-    ).toBe(38);
+    ).toBe(24);
   });
-  it("task 60 min HARD verified = 281", () => {
+  it("task 60 min HARD verified = 422", () => {
     expect(
       computeRawXp({ kind: "TASK", minutes: 60, difficulty: "HARD", verification: "FOCUS_VERIFIED" }).raw
-    ).toBe(281);
+    ).toBe(422);
   });
   it("habit is flat 75 and ignores minutes", () => {
     expect(computeRawXp({ kind: "HABIT", minutes: 999 }).raw).toBe(75);

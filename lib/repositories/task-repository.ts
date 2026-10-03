@@ -6,11 +6,13 @@ import {
   calculateMinimumDurationMs,
   calculateTaskRewardAuthoritative,
   clampDifficulty,
+  focusCreditedMinutes,
   payoutKey,
   ECONOMY,
   VerificationKind,
 } from "../logic/economy";
 import { evaluateSuspiciousPatterns } from "../logic/anti-farming";
+import { shouldCapXp } from "../logic/focus-engine";
 
 export interface TaskFilter {
   status?: TaskStatus;
@@ -474,12 +476,25 @@ export class TaskRepository {
         : null;
 
       if (qualifyingSession) {
-        focusVerified = true;
-        // Consume the session atomically so it cannot be reused.
-        await tx.focusSession.update({
-          where: { id: qualifyingSession.id },
-          data: { consumedAt: serverNow },
-        });
+        // Guard 1: session must have positive credited minutes (no instant-complete bypass)
+        const credited = focusCreditedMinutes(
+          qualifyingSession.actualMinutes ?? 0,
+          qualifyingSession.requiredMinutes
+        );
+        // Guard 2: session must not be heartbeat-capped (suspicious/backgrounded)
+        const capped = shouldCapXp(
+          qualifyingSession.heartbeatCount,
+          qualifyingSession.expectedHeartbeats,
+          qualifyingSession.actualMinutes ?? 0
+        );
+        if (credited > 0 && !capped) {
+          focusVerified = true;
+          // Consume the session atomically so it cannot be reused.
+          await tx.focusSession.update({
+            where: { id: qualifyingSession.id },
+            data: { consumedAt: serverNow },
+          });
+        }
       }
 
       const verification: VerificationKind = focusVerified

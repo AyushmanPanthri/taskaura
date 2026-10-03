@@ -8,6 +8,7 @@
 import { getAuthenticatedUser } from "@/lib/api/auth";
 import { apiError, apiSuccess } from "@/lib/api/response";
 import { focusRepository } from "@/lib/repositories/focus-repository";
+import { ECONOMY } from "@/lib/logic/economy";
 
 export async function POST(req: Request) {
   try {
@@ -17,7 +18,22 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const requiredMinutes = typeof body.requiredMinutes === "number" ? body.requiredMinutes : 25;
+    const rawMinutes = body.requiredMinutes;
+    // Validate requiredMinutes: must be an integer within [focusPlannedMinMinutes, focusPlannedMaxMinutes]
+    if (
+      typeof rawMinutes !== "number" ||
+      !Number.isFinite(rawMinutes) ||
+      !Number.isInteger(rawMinutes) ||
+      rawMinutes < ECONOMY.focusPlannedMinMinutes ||
+      rawMinutes > ECONOMY.focusPlannedMaxMinutes
+    ) {
+      return apiError(
+        "BAD_REQUEST",
+        `requiredMinutes must be an integer between ${ECONOMY.focusPlannedMinMinutes} and ${ECONOMY.focusPlannedMaxMinutes}`,
+        400
+      );
+    }
+    const requiredMinutes = rawMinutes;
     const clientEventId = typeof body.clientEventId === "string" && body.clientEventId.trim()
       ? body.clientEventId.trim()
       : crypto.randomUUID();
