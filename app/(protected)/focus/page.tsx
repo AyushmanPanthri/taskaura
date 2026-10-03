@@ -94,7 +94,7 @@ export default function FocusPage() {
       setTimerSeconds((s) => s + 1);
     }, 1000);
 
-    // Send heartbeat every 60 seconds to server
+    // Send heartbeat every 30 seconds to server
     const heartbeatInterval = setInterval(async () => {
       try {
         await fetch(`/api/v1/focus/${runningSession.id}/heartbeat`, {
@@ -104,7 +104,7 @@ export default function FocusPage() {
       } catch {
         // Handled gracefully
       }
-    }, 60_000);
+    }, 30_000);
 
     return () => {
       clearInterval(tickInterval);
