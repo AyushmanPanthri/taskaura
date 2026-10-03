@@ -456,7 +456,33 @@ export class TaskRepository {
         );
       }
 
-      const verification: VerificationKind = options?.focusVerified
+      // FOCUS_VERIFIED derivation — server-only, never from request body.
+      // Conditions: FocusSession exists with same userId AND taskId, status COMPLETED,
+      // completedAt within the last 30 minutes, and consumedAt null.
+      let focusVerified = false;
+      const thirtyMinutesAgo = new Date(serverNow.getTime() - 30 * 60_000);
+      const qualifyingSession = taskRow.id
+        ? await tx.focusSession.findFirst({
+            where: {
+              userId,
+              taskId: taskRow.id,
+              status: "COMPLETED",
+              completedAt: { gte: thirtyMinutesAgo },
+              consumedAt: null,
+            },
+          })
+        : null;
+
+      if (qualifyingSession) {
+        focusVerified = true;
+        // Consume the session atomically so it cannot be reused.
+        await tx.focusSession.update({
+          where: { id: qualifyingSession.id },
+          data: { consumedAt: serverNow },
+        });
+      }
+
+      const verification: VerificationKind = focusVerified
         ? "FOCUS_VERIFIED"
         : "SELF_CONFIRMED";
 

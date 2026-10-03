@@ -145,7 +145,8 @@ model Task {
   questId            String?
   createdAt          DateTime  @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  focusSessions FocusSession[]
 
   @@index([userId, status])
 }
@@ -203,18 +204,22 @@ model FocusSession {
   id                 String    @id @default(uuid()) @db.Uuid
   clientEventId      String    @unique // dedup key
   userId             String    @db.Uuid
+  taskId             String?   @db.Uuid
   status             String    @default("RUNNING")
   startedAt          DateTime  @default(now())
   completedAt        DateTime?
+  consumedAt         DateTime?
   requiredMinutes    Int
   actualMinutes      Float     @default(0)
   heartbeatCount     Int       @default(0)
   expectedHeartbeats Int       @default(0)
   lastHeartbeatAt    DateTime  @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task Task? @relation(fields: [taskId], references: [id], onDelete: SetNull)
 
   @@index([userId, status])
+  @@index([taskId])
 }
 
 model XPTransaction {

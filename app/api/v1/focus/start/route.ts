@@ -22,11 +22,14 @@ export async function POST(req: Request) {
       ? body.clientEventId.trim()
       : crypto.randomUUID();
     const expectedHeartbeats = Math.floor((requiredMinutes * 60) / 30);
+    // taskId is optional; validation (ownership, non-completed) happens in the repository.
+    const taskId = typeof body.taskId === "string" && body.taskId.trim() ? body.taskId.trim() : null;
 
     const session = await focusRepository.startSession(user.id, {
       requiredMinutes,
       clientEventId,
       expectedHeartbeats,
+      taskId,
     });
 
     return apiSuccess(session, 201);

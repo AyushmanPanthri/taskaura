@@ -7,6 +7,8 @@ export interface StartFocusInput {
   targetDurationMinutes?: number;
   clientEventId: string;
   expectedHeartbeats?: number;
+  /** Optional task to link. Validated server-side: must belong to user and not be completed. */
+  taskId?: string | null;
 }
 
 export interface FocusPayoutData {
@@ -87,6 +89,21 @@ export class FocusRepository {
       // 0. Serialize concurrent focus starts for the user using SELECT FOR UPDATE
       await tx.$queryRaw`SELECT id FROM "users" WHERE id = ${userId}::uuid FOR UPDATE;`;
 
+      // 0b. Validate optional taskId: task must exist, belong to user, and not be completed.
+      const resolvedTaskId = input.taskId ?? null;
+      if (resolvedTaskId) {
+        const taskRow = await tx.task.findFirst({
+          where: { id: resolvedTaskId, userId },
+          select: { id: true, status: true },
+        });
+        if (!taskRow) {
+          throw new Error("Task not found or does not belong to this user");
+        }
+        if (taskRow.status === "COMPLETED" || taskRow.status === "CANCELLED" || taskRow.status === "EXPIRED") {
+          throw new Error(`Cannot link a focus session to a task with status ${taskRow.status}`);
+        }
+      }
+
       // 1. Check for any currently running session for this user
       const active = await tx.focusSession.findFirst({
         where: {
@@ -109,6 +126,7 @@ export class FocusRepository {
           id: existingByEvent.id,
           clientEventId: existingByEvent.clientEventId,
           userId: existingByEvent.userId,
+          taskId: existingByEvent.taskId,
           status: existingByEvent.status as FocusSessionStatus,
           startedAt: existingByEvent.startedAt,
           completedAt: existingByEvent.completedAt,
@@ -125,6 +143,7 @@ export class FocusRepository {
         data: {
           userId,
           clientEventId: input.clientEventId,
+          taskId: resolvedTaskId,
           requiredMinutes: minutes,
           expectedHeartbeats: input.expectedHeartbeats ?? Math.floor(minutes * 2),
           status: FocusSessionStatus.RUNNING,
@@ -137,6 +156,7 @@ export class FocusRepository {
         id: created.id,
         clientEventId: created.clientEventId,
         userId: created.userId,
+        taskId: created.taskId,
         status: created.status as FocusSessionStatus,
         startedAt: created.startedAt,
         completedAt: created.completedAt,

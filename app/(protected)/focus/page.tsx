@@ -49,7 +49,7 @@ export default function FocusPage() {
       try {
         const [fRes, tRes] = await Promise.all([
           fetch("/api/v1/focus").then((r) => r.json()).catch(() => null),
-          fetch("/api/v1/tasks?status=PENDING").then((r) => r.json()).catch(() => null),
+          fetch("/api/v1/tasks").then((r) => r.json()).catch(() => null),
         ]);
         if (cancelled) return;
         if (fRes?.success) {
@@ -58,11 +58,22 @@ export default function FocusPage() {
           if (fRes.data.runningSession) {
             const started = new Date(fRes.data.runningSession.startedAt).getTime();
             setTimerSeconds(Math.max(0, Math.floor((Date.now() - started) / 1000)));
+            if (fRes.data.runningSession.taskId) {
+              setSelectedTaskId(fRes.data.runningSession.taskId);
+            }
           }
         } else {
           setError(fRes?.error?.message ?? "Failed to load focus sessions");
         }
-        if (tRes?.success) setTasks(tRes.data);
+        if (tRes?.success && Array.isArray(tRes.data)) {
+          const incomplete = tRes.data.filter(
+            (t: Task) =>
+              t.status !== "COMPLETED" &&
+              t.status !== "CANCELLED" &&
+              t.status !== "EXPIRED"
+          );
+          setTasks(incomplete);
+        }
       } catch {
         if (!cancelled) setError("Unable to connect to server");
       } finally {
@@ -103,21 +114,24 @@ export default function FocusPage() {
 
   const handleStart = async () => {
     try {
+      const body: { requiredMinutes: number; taskId?: string } = {
+        requiredMinutes: focusTargetMinutes,
+      };
+      if (selectedTaskId) {
+        body.taskId = selectedTaskId;
+      }
       const res = await fetch("/api/v1/focus/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          requiredMinutes: focusTargetMinutes,
-          taskId: selectedTaskId || undefined,
-        }),
+        body: JSON.stringify(body),
       });
-      const json = await res.json();
-      if (json.success) {
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.success) {
         setRunningSession(json.data);
         setTimerSeconds(0);
         setError(null);
       } else {
-        setError(json.error?.message ?? "Failed to start focus session");
+        setError(json?.error?.message || json?.message || "Failed to start focus session");
       }
     } catch {
       setError("Failed to start focus session");
@@ -233,18 +247,20 @@ export default function FocusPage() {
         )}
 
         {/* Task Linking Option */}
-        {!runningSession && tasks.length > 0 && (
-          <div className="mt-6 w-full max-w-sm text-left">
-            <label className="text-[0.7rem] text-white/40 block mb-1">
-              Link to Task (Optional Proof of Work)
-            </label>
+        <div className="mt-6 w-full max-w-sm text-left">
+          <label htmlFor="focus-task-select" className="text-[0.7rem] text-white/40 block mb-1">
+            Link to Task (Optional Proof of Work)
+          </label>
+          <div className="relative">
             <select
+              id="focus-task-select"
               value={selectedTaskId}
+              disabled={Boolean(runningSession)}
               onChange={(e) => setSelectedTaskId(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500/50"
+              className="appearance-none w-full bg-white/5 border border-white/10 rounded-xl px-3.5 py-2 pr-8 text-xs text-white focus:outline-none focus:border-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <option value="" className="bg-[#121220]">
-                None (Standalone Focus Session)
+                No task (unlinked session)
               </option>
               {tasks.map((t) => (
                 <option key={t.id} value={t.id} className="bg-[#121220]">
@@ -252,8 +268,16 @@ export default function FocusPage() {
                 </option>
               ))}
             </select>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-white/40">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
           </div>
-        )}
+          <p className="text-[0.68rem] text-white/40 mt-1">
+            Complete this task within 30 minutes of finishing your session to earn the focus-verified bonus.
+          </p>
+        </div>
 
         {/* Controls */}
         <div className="mt-8 flex gap-3">
