@@ -199,8 +199,8 @@ function RewardsCenterInner() {
       </div>
 
       {loadingCatalogs ? (
-        <div className="p-16 text-center text-xs text-white/40 animate-pulse">
-          Loading player intelligence and badge catalog...
+        <div className="p-16 text-center">
+          <div className="inline-block px-6 py-2 rounded-xl text-xs text-white/40 animate-shimmer">Loading player intelligence and badge catalog...</div>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -238,7 +238,7 @@ function RewardsCenterInner() {
                   required
                   value={xpUserId}
                   onChange={(e) => setXpUserId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-black/40 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-purple-500/50"
+                  className="appearance-none w-full px-3.5 py-2.5 pr-8 bg-black/40 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-purple-500/50"
                 >
                   <option value="">-- Choose player --</option>
                   {users.map((u) => (
@@ -326,7 +326,7 @@ function RewardsCenterInner() {
                   required
                   value={achUserId}
                   onChange={(e) => setAchUserId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-black/40 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500/50"
+                  className="appearance-none w-full px-3.5 py-2.5 pr-8 bg-black/40 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500/50"
                 >
                   <option value="">-- Choose player --</option>
                   {users.map((u) => (
@@ -347,7 +347,7 @@ function RewardsCenterInner() {
                   required
                   value={achId}
                   onChange={(e) => setAchId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-black/40 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500/50"
+                  className="appearance-none w-full px-3.5 py-2.5 pr-8 bg-black/40 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500/50"
                 >
                   {achievements.map((a) => (
                     <option key={a.id} value={a.id}>

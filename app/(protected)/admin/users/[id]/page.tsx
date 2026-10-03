@@ -235,8 +235,8 @@ export default function AdminUserDetailPage({
 
   if (loading) {
     return (
-      <div className="p-16 text-center text-xs text-white/40 animate-pulse">
-        Loading player intelligence...
+      <div className="p-16 text-center">
+        <div className="inline-block px-6 py-2 rounded-xl text-xs text-white/40 animate-shimmer">Loading player intelligence...</div>
       </div>
     );
   }
@@ -680,7 +680,7 @@ export default function AdminUserDetailPage({
                   id="detail-edit-role-select"
                   value={editRole}
                   onChange={(e) => setEditRole(e.target.value as "USER" | "ADMIN")}
-                  className="w-full px-3.5 py-2 bg-black/40 border border-white/15 rounded-xl text-xs text-white focus:outline-none focus:border-amber-400 transition-colors"
+                  className="appearance-none w-full px-3.5 py-2 pr-8 bg-black/40 border border-white/15 rounded-xl text-xs text-white focus:outline-none focus:border-amber-400 transition-colors"
                 >
                   <option value="USER">USER (Standard Player)</option>
                   <option value="ADMIN">ADMIN (Full Administrative Privileges)</option>

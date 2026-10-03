@@ -279,7 +279,7 @@ export default function AdminCreateQuestPage() {
               id="quest-diff-select"
               value={difficulty}
               onChange={(e) => setDifficulty(e.target.value)}
-              className="w-full px-4 py-2.5 bg-black/40 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500/50"
+              className="appearance-none w-full px-4 py-2.5 pr-8 bg-black/40 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500/50"
             >
               <option value="EASY">EASY (Green)</option>
               <option value="NORMAL">NORMAL (Cyan)</option>
@@ -382,7 +382,7 @@ export default function AdminCreateQuestPage() {
               id="quest-status-select"
               value={status}
               onChange={(e) => setStatus(e.target.value as "ACTIVE" | "DRAFT")}
-              className="w-full px-4 py-2.5 bg-black/40 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500/50"
+              className="appearance-none w-full px-4 py-2.5 pr-8 bg-black/40 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500/50"
             >
               <option value="ACTIVE">ACTIVE (Publish Immediately)</option>
               <option value="DRAFT">DRAFT (Keep in Workbench)</option>

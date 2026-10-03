@@ -304,7 +304,7 @@ export default function AdminUsersPage() {
             id="admin-role-filter"
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value)}
-            className="px-3 py-2 bg-black/30 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500/50 transition-colors"
+            className="appearance-none px-3 py-2 pr-8 bg-black/30 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500/50 transition-colors"
           >
             <option value="ALL">All Roles</option>
             <option value="USER">USER</option>
@@ -321,7 +321,7 @@ export default function AdminUsersPage() {
             id="admin-account-type-filter"
             value={accountTypeFilter}
             onChange={(e) => setAccountTypeFilter(e.target.value)}
-            className="px-3 py-2 bg-black/30 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500/50 transition-colors"
+            className="appearance-none px-3 py-2 pr-8 bg-black/30 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500/50 transition-colors"
           >
             <option value="ALL">All Types</option>
             <option value="registered">Registered</option>
@@ -333,8 +333,8 @@ export default function AdminUsersPage() {
       {/* ── Users Table ────────────────────────────────────── */}
       <div className="glass-card border border-white/10 overflow-hidden">
         {loading ? (
-          <div className="p-12 text-center text-xs text-white/40 animate-pulse">
-            Loading player database...
+          <div className="p-12 text-center">
+            <div className="inline-block px-6 py-2 rounded-xl text-xs text-white/40 animate-shimmer">Loading player database...</div>
           </div>
         ) : error ? (
           <div className="p-8 text-center text-xs text-rose-400">
@@ -437,7 +437,7 @@ export default function AdminUsersPage() {
                         <div className="flex items-center justify-end gap-1.5">
                           <Link
                             href={`/admin/users/${u.id}`}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[0.7rem] font-semibold text-white/70 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[0.7rem] font-semibold text-white/70 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
                             title="Inspect user profile"
                           >
                             <span>Inspect</span>
@@ -446,7 +446,7 @@ export default function AdminUsersPage() {
 
                           <button
                             onClick={() => handleOpenEdit(u)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[0.7rem] font-semibold text-amber-300 hover:text-amber-200 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 transition-colors"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[0.7rem] font-semibold text-amber-300 hover:text-amber-200 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 transition-colors"
                             title="Edit user details"
                           >
                             <span>✏️</span>
@@ -456,7 +456,7 @@ export default function AdminUsersPage() {
                           <button
                             onClick={() => handleOpenDelete(u)}
                             disabled={isCurrentAdmin}
-                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[0.7rem] font-semibold transition-colors ${
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[0.7rem] font-semibold transition-colors ${
                               isCurrentAdmin
                                 ? "opacity-30 cursor-not-allowed bg-white/5 text-white/40 border border-white/10"
                                 : "text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20"
@@ -618,7 +618,7 @@ export default function AdminUsersPage() {
                   id="edit-role-select"
                   value={editRole}
                   onChange={(e) => setEditRole(e.target.value as "USER" | "ADMIN")}
-                  className="w-full px-3.5 py-2 bg-black/40 border border-white/15 rounded-xl text-xs text-white focus:outline-none focus:border-amber-400 transition-colors"
+                  className="appearance-none w-full px-3.5 py-2 pr-8 bg-black/40 border border-white/15 rounded-xl text-xs text-white focus:outline-none focus:border-amber-400 transition-colors"
                 >
                   <option value="USER">USER (Standard Player)</option>
                   <option value="ADMIN">ADMIN (Full Administrative Privileges)</option>
