@@ -67,10 +67,11 @@ function makeReq(
 
 describe("Phase 0 Gap Verification", () => {
   describe("P0-A. selfConfirmedTasksPerDay constant", () => {
-    it("ECONOMY.selfConfirmedTasksPerDay is 5 (documented gap — constant defined but not enforced as per-day sub-cap)", () => {
-      // This test documents the spec-drift gap.
-      // The actual enforced cap is ANTI_FARMING_CONFIG.dailyTasksCompletedLimit = 15.
-      // This constant exists but is not read by any repository.
+    it("ECONOMY.selfConfirmedTasksPerDay is 5 (authoritative constant — enforced by task-repository.ts)", () => {
+      // ECONOMY.selfConfirmedTasksPerDay is the single source of truth for the
+      // per-day self-confirmed task XP cap. It is read directly by task-repository.ts
+      // (completeTask) and is not a dead constant. The former spec-drift gap was
+      // resolved in Phase 1 (commit fa2b0db).
       expect(ECONOMY.selfConfirmedTasksPerDay).toBe(5);
     });
   });

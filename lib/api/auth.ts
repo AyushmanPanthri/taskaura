@@ -62,6 +62,8 @@ export async function getAuthenticatedUser(
   }
 
   // 2. Development/Test explicit override (Strictly disabled in production)
+  // TEST BYPASS: x-user-id / Bearer headers accepted only when NODE_ENV !== 'production'.
+  // Rejected in all deployed environments. See getAuthenticatedUser JSDoc above.
   if (allowDevHeader) {
     ensureDemoSeed();
 
