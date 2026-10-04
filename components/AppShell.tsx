@@ -238,11 +238,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       target === 0 ||
       window.matchMedia("(prefers-reduced-motion: reduce)").matches
     ) {
-      setAnimatedXp(target);
-      return;
+      const frame = requestAnimationFrame(() => setAnimatedXp(target));
+      return () => cancelAnimationFrame(frame);
     }
 
-    setAnimatedXp(0);
+    const firstFrame = requestAnimationFrame(() => setAnimatedXp(0));
     const startedAt = Date.now();
     const durationMs = 650;
     const timer = setInterval(() => {
@@ -250,7 +250,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       setAnimatedXp(Math.round(target * fraction));
       if (fraction >= 1) clearInterval(timer);
     }, 30);
-    return () => clearInterval(timer);
+    return () => {
+      cancelAnimationFrame(firstFrame);
+      clearInterval(timer);
+    };
   }, [gamificationToast]);
 
   useEffect(() => {
