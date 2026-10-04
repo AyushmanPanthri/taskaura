@@ -487,5 +487,147 @@ describe("Focus-Verified Task Completion", () => {
     const res = await startFocusRoute(req);
     expect(res.status).toBe(400);
   });
+
+  // ── Bug reproduction & Regression tests ──────────────────
+  it("session->task completes with no other status change -> XP is FOCUS_VERIFIED rate, not 0", async () => {
+    // 1. Create task in PENDING status (default 30 min, NORMAL difficulty)
+    const task = await taskRepository.createTask(USER_A, {
+      title: "Linked Session Bug Reproduction Task",
+      difficulty: Difficulty.NORMAL,
+      estimatedMinutes: 30,
+    });
+    expect(task.status).toBe(TaskStatus.PENDING);
+    expect(task.startedAt).toBeNull();
+
+    // 2. Start a focus session linked to this task
+    const startRes = await startFocusRoute(
+      makeReq(
+        "/api/v1/focus/start",
+        "POST",
+        { requiredMinutes: 30, clientEventId: crypto.randomUUID(), taskId: task.id },
+        { "x-user-id": USER_A }
+      )
+    );
+    expect(startRes.status).toBe(201);
+    const startJson = await startRes.json();
+    const sessionId = startJson.data.id;
+
+    // Verify task transitioned to IN_PROGRESS and has startedAt
+    const inProgressTask = await prisma.task.findUnique({ where: { id: task.id } });
+    expect(inProgressTask?.status).toBe(TaskStatus.IN_PROGRESS);
+    expect(inProgressTask?.startedAt).not.toBeNull();
+
+    // Fast-forward startedAt to 30 minutes ago so minimum duration check passes (30m * 0.8 = 24m)
+    const thirtyMinAgo = new Date(Date.now() - 30 * 60_000);
+    await prisma.task.update({
+      where: { id: task.id },
+      data: { startedAt: thirtyMinAgo },
+    });
+
+    // Complete the focus session (qualifying session: 30 actual minutes, 60 heartbeats)
+    await prisma.focusSession.update({
+      where: { id: sessionId },
+      data: {
+        status: FocusSessionStatus.COMPLETED,
+        startedAt: thirtyMinAgo,
+        completedAt: new Date(Date.now() - 2 * 60_000), // completed 2 min ago
+        actualMinutes: 30,
+        heartbeatCount: 60,
+        expectedHeartbeats: 60,
+      },
+    });
+
+    // 3. Complete the task directly with no manual status change in between
+    const completeRes = await completeTaskRoute(
+      makeReq(
+        `/api/v1/tasks/${task.id}/complete`,
+        "POST",
+        {},
+        { "x-user-id": USER_A }
+      ),
+      { params: Promise.resolve({ id: task.id }) }
+    );
+    expect(completeRes.status).toBe(200);
+    const completeJson = await completeRes.json();
+
+    expect(completeJson.data.rejected).toBe(false);
+    expect(completeJson.data.task.status).toBe(TaskStatus.COMPLETED);
+    // Base 150 * effort 1.0 (30m/30m) * difficulty 1.0 (NORMAL) * verification 1.5 (FOCUS_VERIFIED) = 225 XP
+    expect(completeJson.data.xpAwarded).toBe(225);
+    expect(completeJson.data.reason).toBeUndefined();
+
+    // Audit log should confirm FOCUS_VERIFIED
+    const audit = await prisma.adminAuditLog.findFirst({
+      where: { targetUserId: USER_A, action: "TASK_COMPLETED" },
+    });
+    expect(audit).not.toBeNull();
+    const meta = JSON.parse(audit!.metadata);
+    expect(meta.verificationType).toBe("FOCUS_VERIFIED");
+  });
+
+  it("task with no linked session, PENDING->COMPLETED directly, still pays 0, reason NEVER_STARTED", async () => {
+    // Create task in PENDING status
+    const task = await taskRepository.createTask(USER_A, {
+      title: "Direct Unstarted Task",
+      difficulty: Difficulty.NORMAL,
+      estimatedMinutes: 30,
+    });
+    expect(task.status).toBe(TaskStatus.PENDING);
+    expect(task.startedAt).toBeNull();
+
+    // Directly attempt completion
+    const completeRes = await completeTaskRoute(
+      makeReq(
+        `/api/v1/tasks/${task.id}/complete`,
+        "POST",
+        {},
+        { "x-user-id": USER_A }
+      ),
+      { params: Promise.resolve({ id: task.id }) }
+    );
+    expect(completeRes.status).toBe(200);
+    const completeJson = await completeRes.json();
+
+    expect(completeJson.data.task.status).toBe(TaskStatus.COMPLETED);
+    expect(completeJson.data.xpAwarded).toBe(0);
+    expect(completeJson.data.reason).toBe("NEVER_STARTED");
+
+    const audit = await prisma.adminAuditLog.findFirst({
+      where: { targetUserId: USER_A, action: "TASK_COMPLETED_ZERO_XP" },
+    });
+    expect(audit).not.toBeNull();
+    const meta = JSON.parse(audit!.metadata);
+    expect(meta.reason).toBe("NEVER_STARTED");
+  });
+
+  it("linking a session to an already IN_PROGRESS task does not overwrite existing startedAt", async () => {
+    const existingStartedAt = new Date(Date.now() - 45 * 60_000);
+    const task = await taskRepository.createTask(USER_A, {
+      title: "Already Started Task",
+      difficulty: Difficulty.NORMAL,
+      estimatedMinutes: 30,
+    });
+    await prisma.task.update({
+      where: { id: task.id },
+      data: {
+        status: TaskStatus.IN_PROGRESS,
+        startedAt: existingStartedAt,
+      },
+    });
+
+    const startRes = await startFocusRoute(
+      makeReq(
+        "/api/v1/focus/start",
+        "POST",
+        { requiredMinutes: 25, clientEventId: crypto.randomUUID(), taskId: task.id },
+        { "x-user-id": USER_A }
+      )
+    );
+    expect(startRes.status).toBe(201);
+
+    const checkTask = await prisma.task.findUnique({ where: { id: task.id } });
+    expect(checkTask?.status).toBe(TaskStatus.IN_PROGRESS);
+    expect(checkTask?.startedAt?.getTime()).toBe(existingStartedAt.getTime());
+  });
 });
 

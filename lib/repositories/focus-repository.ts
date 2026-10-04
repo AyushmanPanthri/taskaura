@@ -91,16 +91,17 @@ export class FocusRepository {
 
       // 0b. Validate optional taskId: task must exist, belong to user, and not be completed.
       const resolvedTaskId = input.taskId ?? null;
+      let linkedTaskRow: { id: string; status: string; startedAt: Date | null } | null = null;
       if (resolvedTaskId) {
-        const taskRow = await tx.task.findFirst({
+        linkedTaskRow = await tx.task.findFirst({
           where: { id: resolvedTaskId, userId },
-          select: { id: true, status: true },
+          select: { id: true, status: true, startedAt: true },
         });
-        if (!taskRow) {
+        if (!linkedTaskRow) {
           throw new Error("Task not found or does not belong to this user");
         }
-        if (taskRow.status === "COMPLETED" || taskRow.status === "CANCELLED" || taskRow.status === "EXPIRED") {
-          throw new Error(`Cannot link a focus session to a task with status ${taskRow.status}`);
+        if (linkedTaskRow.status === "COMPLETED" || linkedTaskRow.status === "CANCELLED" || linkedTaskRow.status === "EXPIRED") {
+          throw new Error(`Cannot link a focus session to a task with status ${linkedTaskRow.status}`);
         }
       }
 
@@ -138,6 +139,16 @@ export class FocusRepository {
       }
 
       const now = new Date();
+      if (linkedTaskRow && linkedTaskRow.status === "PENDING") {
+        await tx.task.update({
+          where: { id: linkedTaskRow.id },
+          data: {
+            status: "IN_PROGRESS",
+            ...(linkedTaskRow.startedAt ? {} : { startedAt: now }),
+          },
+        });
+      }
+
       const minutes = input.requiredMinutes ?? input.targetDurationMinutes ?? 25;
       const created = await tx.focusSession.create({
         data: {
