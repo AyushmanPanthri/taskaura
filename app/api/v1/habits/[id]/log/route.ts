@@ -15,6 +15,7 @@ import { apiError, apiSuccess, safeCatchError } from "@/lib/api/response";
 import { habitRepository } from "@/lib/repositories/habit-repository";
 import { payoutKey, ECONOMY } from "@/lib/logic/economy";
 import { XPSourceType, RewardType } from "@/lib/logic/types";
+import { buildCompletionGamification } from "@/lib/services/completion-gamification";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -58,10 +59,20 @@ export async function POST(req: Request, { params }: RouteParams) {
       }
     );
 
+    const gamification =
+      result.log.completed && !result.isDuplicate
+        ? await buildCompletionGamification({
+            userId: user.id,
+            xpAwarded: result.xpAwarded,
+            feedbackType: "HABIT_COMPLETE",
+          })
+        : undefined;
+
     return apiSuccess({
       log: result.log,
       xpAwarded: result.xpAwarded,
       isDuplicate: result.isDuplicate,
+      ...(gamification ? { gamification } : {}),
     });
   } catch (err) {
     return safeCatchError(err);

@@ -38,9 +38,15 @@ export interface CompleteTaskResult {
   isDuplicate: boolean;
   xpAwarded: number;
   bonusXp: number;
+  xpCapped?: boolean;
+  xpReduced?: boolean;
   rejected?: boolean;
   reason?: string;
   classification?: "NORMAL" | "SUSPICIOUS" | "BLOCKED_REWARD";
+  /** Populated when reason === "TOO_FAST" */
+  minimumRequiredDurationMs?: number;
+  /** Populated when reason === "TOO_FAST" */
+  serverDurationMs?: number;
 }
 
 /** Tasks created before this timestamp are grandfathered under legacy duration rules */
@@ -625,6 +631,8 @@ export class TaskRepository {
           bonusXp: 0,
           rejected: true,
           reason: "TOO_FAST",
+          minimumRequiredDurationMs,
+          serverDurationMs,
         };
       }
 
@@ -1105,6 +1113,8 @@ export class TaskRepository {
         isDuplicate: false,
         xpAwarded: payoutAmount,
         bonusXp: streakBonus,
+        xpCapped: payoutAmount < rewardResult.finalXp,
+        xpReduced: rewardResult.isReducedNewUser,
         classification: patternResult.classification,
       };
     });
@@ -1112,4 +1122,3 @@ export class TaskRepository {
 }
 
 export const taskRepository = new TaskRepository();
-

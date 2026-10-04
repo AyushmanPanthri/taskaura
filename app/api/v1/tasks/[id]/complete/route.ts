@@ -11,6 +11,7 @@
 import { getAuthenticatedUser } from "@/lib/api/auth";
 import { apiError, apiSuccess, safeCatchError } from "@/lib/api/response";
 import { taskRepository } from "@/lib/repositories/task-repository";
+import { buildCompletionGamification } from "@/lib/services/completion-gamification";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -36,6 +37,55 @@ export async function POST(req: Request, { params }: RouteParams) {
       markDoneWithoutReward,
     });
 
+    let gamification;
+    if (result.rejected) {
+      const remainingMs = Math.max(
+        0,
+        (result.minimumRequiredDurationMs ?? 0) -
+          (result.serverDurationMs ?? 0)
+      );
+      gamification = {
+        feedback: {
+          type: "REJECTED" as const,
+          reason: result.reason ?? "REJECTED",
+          what: "This task is still in progress.",
+          why:
+            result.reason === "TOO_FAST"
+              ? "The minimum server-verified duration has not elapsed."
+              : "The server's completion eligibility rules are not yet satisfied.",
+          remainingMs,
+        },
+      };
+    } else if (
+      !result.isDuplicate &&
+      result.task.status === "COMPLETED"
+    ) {
+      const capped =
+        result.xpCapped === true ||
+        [
+          "DAILY_TASK_XP_CAP",
+          "DAILY_COMPLETION_LIMIT",
+          "SELF_CONFIRMED_LIMIT",
+          "BLOCKED_REWARD",
+        ].includes(result.reason ?? "");
+      gamification = await buildCompletionGamification({
+        userId: user.id,
+        xpAwarded: result.xpAwarded,
+        capped,
+        reduced: result.xpReduced === true,
+        reason:
+          result.reason ??
+          (result.xpReduced
+            ? "NEW_USER_RAMP_UP"
+            : capped
+              ? "XP_LIMIT_REACHED"
+              : undefined),
+        feedbackType:
+          result.xpAwarded > 0 ? "TASK_COMPLETE" : "TASK_ZERO_XP",
+        celebration: "TASK_COMPLETE",
+      });
+    }
+
     return apiSuccess({
       task: result.task,
       xpAwarded: result.xpAwarded,
@@ -44,6 +94,9 @@ export async function POST(req: Request, { params }: RouteParams) {
       rejected: result.rejected ?? false,
       reason: result.reason,
       classification: result.classification,
+      minimumRequiredDurationMs: result.minimumRequiredDurationMs,
+      serverDurationMs: result.serverDurationMs,
+      ...(gamification ? { gamification } : {}),
     });
   } catch (err: unknown) {
     const error = err as Error;

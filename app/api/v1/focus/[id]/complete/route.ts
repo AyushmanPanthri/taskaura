@@ -19,6 +19,7 @@ import {
   shouldCapXp,
   calculateExpectedHeartbeats,
 } from "@/lib/logic/focus-engine";
+import { buildCompletionGamification } from "@/lib/services/completion-gamification";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -115,6 +116,16 @@ export async function POST(req: Request, { params }: RouteParams) {
       }
     );
 
+    const gamification = result.isDuplicate
+      ? undefined
+      : await buildCompletionGamification({
+          userId: user.id,
+          xpAwarded: result.xpAwarded,
+          capped: heartbeatSuspicious,
+          reason: heartbeatSuspicious ? "HEARTBEAT_CAP" : undefined,
+          feedbackType: "FOCUS_COMPLETE",
+        });
+
     return apiSuccess({
       session: result.session,
       xpAwarded: result.xpAwarded,
@@ -122,6 +133,7 @@ export async function POST(req: Request, { params }: RouteParams) {
       capped: false,
       isDuplicate: result.isDuplicate,
       evidenceOnly,
+      ...(gamification ? { gamification } : {}),
     });
   } catch (err) {
     return safeCatchError(err);
