@@ -22,6 +22,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
+import type { GamificationCelebration } from "@/lib/logic/completion-gamification";
 
 // ── Celebration chime (Web Audio API — no file dependency) ──
 // Plays a quick two-note ascending ding when a celebration fires.
@@ -89,6 +90,17 @@ export const VIDEO_SLOTS: Record<CelebrationKind, string> = {
   "quest-complete": "/celebrations/quest-complete.mp4",
   "task-complete":  "/celebrations/level-up.mp4",     // TEMP: reuse level-up clip
   "habit-complete": "/celebrations/quest-complete.mp4", // TEMP: reuse quest-complete clip
+};
+
+export const GAMIFICATION_CELEBRATION_SLOTS: Record<
+  GamificationCelebration,
+  CelebrationKind
+> = {
+  TASK_COMPLETE: "task-complete",
+  LEVEL_UP: "level-up",
+  ACHIEVEMENT_UNLOCKED: "task-complete",
+  STREAK_MILESTONE: "habit-complete",
+  RANK_UP: "quest-complete",
 };
 
 // How long the overlay stays at full opacity before the fade begins (ms).

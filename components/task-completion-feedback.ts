@@ -1,5 +1,6 @@
 import type { Task } from "@/lib/logic/types";
 import type { CompletionGamification } from "@/lib/logic/completion-gamification";
+import { GAMIFICATION_CELEBRATION_SLOTS } from "./CelebrationOverlay";
 import { triggerCelebration, triggerXpToast } from "./AppShell";
 
 interface TaskCompletionResponse {
@@ -61,7 +62,7 @@ export function handleTaskCompletionResponse(
       (achievement) => `Achievement unlocked: ${achievement.name}`
     ),
     response.gamification?.ranking?.changed
-      ? `Rank up: #${response.gamification.ranking.previousRank} to #${response.gamification.ranking.newRank}`
+      ? `Rank ${response.gamification.ranking.newRank < response.gamification.ranking.previousRank ? "up" : "down"}: #${response.gamification.ranking.previousRank} to #${response.gamification.ranking.newRank}`
       : null,
     response.gamification?.streak?.changed
       ? `${response.gamification.streak.current} day streak`
@@ -78,6 +79,8 @@ export function handleTaskCompletionResponse(
     );
   }
   triggerXpToast(xpAwarded, label);
-  triggerCelebration("task-complete");
+  const celebration =
+    response.gamification?.feedback.celebration ?? "TASK_COMPLETE";
+  triggerCelebration(GAMIFICATION_CELEBRATION_SLOTS[celebration]);
   return "completed";
 }

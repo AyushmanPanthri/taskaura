@@ -9,7 +9,10 @@
 // ============================================================
 
 import React, { useEffect, useRef, useState } from "react";
-import { CelebrationOverlay, type CelebrationKind } from "./CelebrationOverlay";
+import {
+  CelebrationOverlay,
+  type CelebrationKind,
+} from "./CelebrationOverlay";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
@@ -508,7 +511,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             ))}
             {gamificationToast.ranking?.changed && (
               <span className="badge badge-cyan">
-                Rank up: #{gamificationToast.ranking.previousRank} to #{gamificationToast.ranking.newRank}
+                Rank {gamificationToast.ranking.newRank < gamificationToast.ranking.previousRank ? "up" : "down"}: #{gamificationToast.ranking.previousRank} to #{gamificationToast.ranking.newRank}
               </span>
             )}
           </div>

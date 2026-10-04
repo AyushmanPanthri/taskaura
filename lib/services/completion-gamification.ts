@@ -254,5 +254,19 @@ export async function buildCompletionGamification({
     }
   }
 
+  if (celebration) {
+    result.feedback.celebration = result.progression?.levelUp
+      ? "LEVEL_UP"
+      : newlyUnlocked.length > 0
+        ? "ACHIEVEMENT_UNLOCKED"
+        : result.streak?.changed &&
+            [3, 7, 14, 30].includes(result.streak.current)
+          ? "STREAK_MILESTONE"
+          : result.ranking?.changed &&
+              result.ranking.newRank < result.ranking.previousRank
+            ? "RANK_UP"
+            : celebration;
+  }
+
   return result;
 }
