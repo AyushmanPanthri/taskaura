@@ -21,6 +21,7 @@ import type { ProgressSummary } from "@/lib/services/progress-service";
 import type { Task } from "@/lib/logic/types";
 import type { HabitWithTodayStatus } from "@/lib/services/habit-service";
 import type { CompletionGamification } from "@/lib/logic/completion-gamification";
+import type { ActivityItem } from "@/lib/logic/activity";
 
 const DIFF_BADGE: Record<string, { cls: string; label: string }> = {
   EASY: { cls: "badge-green", label: "Easy" },
@@ -33,6 +34,7 @@ export default function DashboardPage() {
   const [progress, setProgress] = useState<ProgressSummary | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [habits, setHabits] = useState<HabitWithTodayStatus[]>([]);
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [completionNotice, setCompletionNotice] = useState<string | null>(null);
@@ -40,10 +42,11 @@ export default function DashboardPage() {
 
   const fetchDashboardData = useCallback(async () => {
     try {
-      const [pRes, tRes, hRes] = await Promise.all([
+      const [pRes, tRes, hRes, aRes] = await Promise.all([
         fetch("/api/v1/progress").then((r) => r.json()).catch(() => null),
         fetch("/api/v1/tasks").then((r) => r.json()).catch(() => null),
         fetch("/api/v1/habits").then((r) => r.json()).catch(() => null),
+        fetch("/api/v1/activity").then((r) => r.json()).catch(() => null),
       ]);
 
       if (pRes?.success) {
@@ -55,6 +58,7 @@ export default function DashboardPage() {
 
       if (tRes?.success) setTasks(tRes.data);
       if (hRes?.success) setHabits(hRes.data);
+      if (aRes?.success) setActivity(aRes.data);
     } catch {
       setError("Unable to connect to server");
     } finally {
@@ -66,10 +70,11 @@ export default function DashboardPage() {
     let cancelled = false;
     async function load() {
       try {
-        const [pRes, tRes, hRes] = await Promise.all([
+        const [pRes, tRes, hRes, aRes] = await Promise.all([
           fetch("/api/v1/progress").then((r) => r.json()).catch(() => null),
           fetch("/api/v1/tasks").then((r) => r.json()).catch(() => null),
           fetch("/api/v1/habits").then((r) => r.json()).catch(() => null),
+          fetch("/api/v1/activity").then((r) => r.json()).catch(() => null),
         ]);
         if (cancelled) return;
 
@@ -80,6 +85,7 @@ export default function DashboardPage() {
         }
         if (tRes?.success) setTasks(tRes.data);
         if (hRes?.success) setHabits(hRes.data);
+        if (aRes?.success) setActivity(aRes.data);
       } catch {
         if (!cancelled) setError("Unable to connect to server");
       } finally {
@@ -373,6 +379,40 @@ export default function DashboardPage() {
                               <span className="badge badge-purple">🤖 AI</span>
                             )}
                           </div>
+                        </div>
+
+                        {/* Recent Activity */}
+                        <div className="glass-card p-5">
+                          <h3 className="font-bold text-sm mb-3 text-white/90">Recent activity</h3>
+                          {activity.length === 0 ? (
+                            <p className="text-xs text-white/35">No recent activity yet.</p>
+                          ) : (
+                            <div className="space-y-2">
+                              {activity.slice(0, 10).map((item) => (
+                                <div
+                                  key={item.id}
+                                  className="flex items-center justify-between gap-3 rounded-xl px-3 py-2 bg-white/[0.02]"
+                                >
+                                  <div className="min-w-0">
+                                    <p className="text-xs text-white/80 truncate">{item.label}</p>
+                                    {item.detail && (
+                                      <p className="text-[0.65rem] text-white/35">{item.detail}</p>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-3 shrink-0">
+                                    {item.xpAwarded !== undefined && (
+                                      <span className="text-[0.65rem] font-semibold text-purple-300">
+                                        +{item.xpAwarded} XP
+                                      </span>
+                                    )}
+                                    <time className="text-[0.65rem] text-white/30">
+                                      {new Date(item.createdAt).toLocaleDateString()}
+                                    </time>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                         <button
                           onClick={() => handleCompleteTask(task.id)}
