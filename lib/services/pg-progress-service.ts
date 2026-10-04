@@ -22,7 +22,6 @@ import {
   getRankTitleInfo,
   getLegacyLevelTitle,
 } from "../logic/economy";
-import { ACHIEVEMENT_DEFINITIONS } from "../logic/achievement-engine";
 
 export interface PgProgressSummary {
   userId: string;
@@ -139,20 +138,26 @@ export async function getPgProgressSummary(userId: string): Promise<PgProgressSu
   ]);
 
   // ── 5. Achievements from PostgreSQL ───────────────────────
-  const unlockedRows = await prisma.userAchievement.findMany({
-    where: { userId },
-    select: { achievementId: true, unlockedAt: true },
-  });
+  const [achievementRows, unlockedRows] = await Promise.all([
+    prisma.achievement.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, description: true },
+    }),
+    prisma.userAchievement.findMany({
+      where: { userId },
+      select: { achievementId: true, unlockedAt: true },
+    }),
+  ]);
   const unlockedMap = new Map<string, Date>(
     unlockedRows.map((r) => [r.achievementId, r.unlockedAt])
   );
 
-  const achievements = ACHIEVEMENT_DEFINITIONS.slice(0, 10).map((def) => ({
-    id: def.id,
-    name: def.name,
-    description: def.description,
-    unlocked: unlockedMap.has(def.id),
-    unlockedAt: unlockedMap.get(def.id)?.toISOString() ?? null,
+  const achievements = achievementRows.map((achievement) => ({
+    id: achievement.id,
+    name: achievement.name,
+    description: achievement.description,
+    unlocked: unlockedMap.has(achievement.id),
+    unlockedAt: unlockedMap.get(achievement.id)?.toISOString() ?? null,
   }));
 
   // ── 6. Weekly score from PostgreSQL ───────────────────────
