@@ -70,6 +70,13 @@ export function handleTaskCompletionResponse(
     .filter(Boolean)
     .join(" · ");
 
+  if (response.gamification && typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent("taskaura:gamification-update", {
+        detail: response.gamification,
+      })
+    );
+  }
   triggerXpToast(xpAwarded, label);
   triggerCelebration("task-complete");
   return "completed";

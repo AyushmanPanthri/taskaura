@@ -9,13 +9,18 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Ring } from "@/components/Ring";
-import { triggerXpToast } from "@/components/AppShell";
+import {
+  triggerCelebration,
+  triggerGamificationUpdate,
+  triggerXpToast,
+} from "@/components/AppShell";
 import { handleTaskCompletionResponse } from "@/components/task-completion-feedback";
 import { AiProposalCard } from "@/components/AiProposalCard";
 import { ErrorState } from "@/components/States";
 import type { ProgressSummary } from "@/lib/services/progress-service";
 import type { Task } from "@/lib/logic/types";
 import type { HabitWithTodayStatus } from "@/lib/services/habit-service";
+import type { CompletionGamification } from "@/lib/logic/completion-gamification";
 
 const DIFF_BADGE: Record<string, { cls: string; label: string }> = {
   EASY: { cls: "badge-green", label: "Easy" },
@@ -30,6 +35,8 @@ export default function DashboardPage() {
   const [habits, setHabits] = useState<HabitWithTodayStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [completionNotice, setCompletionNotice] = useState<string | null>(null);
+  const [streakPulse, setStreakPulse] = useState(false);
 
   const fetchDashboardData = useCallback(async () => {
     try {
@@ -85,6 +92,60 @@ export default function DashboardPage() {
     };
   }, []);
 
+  useEffect(() => {
+    const onGamificationUpdate = (event: Event) => {
+      const gamification = (
+        event as CustomEvent<CompletionGamification>
+      ).detail;
+      if (!gamification?.xp || !gamification.progression) return;
+
+      setProgress((current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          totalXp: gamification.xp!.newTotal,
+          level: gamification.progression!.newLevel,
+          fraction: gamification.progression!.levelProgress,
+          xpEarnedInLevel: gamification.progression!.xpIntoLevel,
+          xpRequiredForLevel: gamification.progression!.xpForNextLevel,
+          xpRemaining: Math.max(
+            0,
+            gamification.progression!.xpForNextLevel -
+              gamification.progression!.xpIntoLevel
+          ),
+          levelProgressPercentage:
+            gamification.progression!.levelProgress * 100,
+          streak: gamification.streak
+            ? { ...current.streak, current: gamification.streak.current }
+            : current.streak,
+          achievements: current.achievements.map((achievement) => {
+            const unlocked = gamification.achievements?.find(
+              (item) => item.id === achievement.id
+            );
+            return unlocked
+              ? {
+                  ...achievement,
+                  unlocked: true,
+                  unlockedAt: unlocked.unlockedAt,
+                }
+              : achievement;
+          }),
+        };
+      });
+      if (
+        gamification.streak?.changed &&
+        !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      ) {
+        setStreakPulse(true);
+        setTimeout(() => setStreakPulse(false), 900);
+      }
+    };
+
+    window.addEventListener("taskaura:gamification-update", onGamificationUpdate);
+    return () =>
+      window.removeEventListener("taskaura:gamification-update", onGamificationUpdate);
+  }, []);
+
   const handleCompleteTask = async (taskId: string) => {
     try {
       const res = await fetch(`/api/v1/tasks/${taskId}/complete`, {
@@ -94,16 +155,40 @@ export default function DashboardPage() {
       const json = await res.json();
       if (json.success && json.data) {
         handleTaskCompletionResponse(json.data, {
-          onConfirmed: (completedTask) =>
+          onConfirmed: (completedTask) => {
             setTasks((current) =>
               current.map((task) =>
                 task.id === completedTask.id
                   ? { ...task, ...completedTask }
                   : task
               )
-            ),
+            );
+            setProgress((current) =>
+              current
+                ? {
+                    ...current,
+                    dailyMetrics: {
+                      ...current.dailyMetrics,
+                      tasksCompleted: current.dailyMetrics.tasksCompleted + 1,
+                    },
+                  }
+                : current
+            );
+          },
+          onRejected: (rejection) => {
+            const reason =
+              rejection.gamification?.feedback.reason ??
+              rejection.reason ??
+              "REJECTED";
+            const remainingMs =
+              rejection.gamification?.feedback.remainingMs;
+            setCompletionNotice(
+              remainingMs && remainingMs > 0
+                ? `${reason}: ${Math.ceil(remainingMs / 60_000)}m remaining.`
+                : `Completion rejected: ${reason}`
+            );
+          },
         });
-        await fetchDashboardData();
       }
     } catch {
       // Failed to complete
@@ -118,10 +203,16 @@ export default function DashboardPage() {
         body: JSON.stringify({ completed: true }),
       });
       const json = await res.json();
-      if (json.success) {
+      if (
+        json.success &&
+        json.data.log?.completed &&
+        !json.data.isDuplicate
+      ) {
+        triggerGamificationUpdate(json.data.gamification);
         if (json.data.xpAwarded > 0) {
           triggerXpToast(json.data.xpAwarded, "Habit Logged");
         }
+        triggerCelebration("habit-complete");
         await fetchDashboardData();
       }
     } catch {
@@ -142,6 +233,11 @@ export default function DashboardPage() {
     <div className="space-y-6 animate-fade-in-up">
       {/* Error state */}
       {error && <ErrorState message={error} onRetry={fetchDashboardData} />}
+      {completionNotice && (
+        <div className="glass-card px-4 py-3 border border-amber-500/30 text-sm text-amber-200" role="alert">
+          {completionNotice}
+        </div>
+      )}
 
       {/* Loading state */}
       {loading ? (
@@ -161,9 +257,9 @@ export default function DashboardPage() {
               </p>
             </div>
             <div className="flex items-center gap-3 bg-white/5 border border-white/5 px-4 py-2 rounded-2xl">
-              <span className="text-2xl streak-flame">🔥</span>
+              <span className={`text-2xl${streakPulse ? " streak-flame" : ""}`}>🔥</span>
               <div>
-                <p className="text-xl font-extrabold text-orange-400">{streakDays} Days</p>
+                <p className="text-xl font-extrabold text-orange-400">{streakDays} day streak</p>
                 <p className="text-[0.65rem] text-white/40">Active Streak</p>
               </div>
             </div>

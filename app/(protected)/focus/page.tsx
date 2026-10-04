@@ -8,7 +8,10 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { Ring } from "@/components/Ring";
-import { triggerXpToast } from "@/components/AppShell";
+import {
+  triggerGamificationUpdate,
+  triggerXpToast,
+} from "@/components/AppShell";
 import { ErrorState } from "@/components/States";
 import type { FocusSession, Task } from "@/lib/logic/types";
 
@@ -148,6 +151,9 @@ export default function FocusPage() {
       });
       const json = await res.json();
       if (json.success) {
+        if (!json.data.isDuplicate) {
+          triggerGamificationUpdate(json.data.gamification);
+        }
         if (json.data.xpAwarded > 0) {
           triggerXpToast(json.data.xpAwarded, "Focus Session Complete");
         }

@@ -7,7 +7,11 @@
 // ============================================================
 
 import React, { useState, useEffect, useCallback } from "react";
-import { triggerXpToast, triggerCelebration } from "@/components/AppShell";
+import {
+  triggerCelebration,
+  triggerGamificationUpdate,
+  triggerXpToast,
+} from "@/components/AppShell";
 import { EmptyState, ErrorState } from "@/components/States";
 import type { HabitWithTodayStatus } from "@/lib/services/habit-service";
 import { HabitFrequency } from "@/lib/logic/types";
@@ -67,14 +71,15 @@ export default function HabitsPage() {
         body: JSON.stringify({ completed: true }),
       });
       const json = await res.json();
-      if (json.success) {
+      if (
+        json.success &&
+        json.data.log?.completed &&
+        !json.data.isDuplicate
+      ) {
+        triggerGamificationUpdate(json.data.gamification);
         if (json.data.xpAwarded > 0) {
           triggerXpToast(json.data.xpAwarded, "Habit Completed");
         }
-        // TEMP: Always play a celebration video on every habit completion
-        // for demo reliability.  Remove this unconditional trigger and
-        // restore xpAwarded conditions once per-event video selection
-        // is implemented.
         triggerCelebration("habit-complete");
         await fetchHabits();
       }
