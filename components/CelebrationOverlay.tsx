@@ -23,6 +23,52 @@
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
 
+// ── Celebration chime (Web Audio API — no file dependency) ──
+// Plays a quick two-note ascending ding when a celebration fires.
+// All errors are swallowed: autoplay policy blocks must never surface
+// to the user or interrupt the video overlay.
+function playCelebrationChime() {
+  try {
+    // AudioContext may be unavailable in SSR / test environments.
+    const Ctx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
+    if (!Ctx) return;
+
+    const ctx = new Ctx();
+    const now = ctx.currentTime;
+
+    // Two-note ascending ding: C5 → E5
+    const notes = [
+      { freq: 523.25, start: 0,    dur: 0.18 },
+      { freq: 659.25, start: 0.14, dur: 0.28 },
+    ];
+
+    notes.forEach(({ freq, start, dur }) => {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+
+      // Quick attack, smooth exponential release
+      gain.gain.setValueAtTime(0, now + start);
+      gain.gain.linearRampToValueAtTime(0.28, now + start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + start + dur);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + start);
+      osc.stop(now + start + dur);
+    });
+
+    // Close the context shortly after the chime ends to free resources.
+    setTimeout(() => { try { void ctx.close(); } catch { /* ignore */ } }, 600);
+  } catch {
+    // Autoplay blocked or API unavailable — fail silently.
+  }
+}
+
 export type CelebrationKind = "level-up" | "quest-complete" | "task-complete" | "habit-complete";
 
 interface Props {
@@ -68,9 +114,14 @@ export function CelebrationOverlay({ kind, onDismiss }: Props) {
     }, FADE_MS);
   }, [onDismiss]);
 
-  // Cap timer & Esc key — set up when a new celebration starts.
+  // Cap timer, Esc key, and celebration chime — set up when a new celebration starts.
   useEffect(() => {
     if (!kind) return;
+
+    // Play the success chime at the same moment the video fires.
+    // Intentionally NOT gated on prefers-reduced-motion: that setting
+    // governs visual motion, not audio. The chime is ~0.4 s and non-intrusive.
+    playCelebrationChime();
 
     // Start the 3-second cap.
     capTimerRef.current = setTimeout(dismiss, CAP_MS);

@@ -288,19 +288,55 @@ body::before {
 .action-btn-primary {
   background: linear-gradient(135deg, #8b5cf6, #6d28d9);
   color: white;
+  /* Micro-interaction: smooth scale + glow on hover, press-down on active */
+  transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.15s ease,
+              opacity 0.15s ease;
 }
-.action-btn-primary:hover {
-  box-shadow: 0 4px 24px rgba(139, 92, 246, 0.4);
-  transform: translateY(-1px);
+.action-btn-primary:hover:not(:disabled) {
+  box-shadow: 0 6px 28px rgba(139, 92, 246, 0.55),
+              0 2px 8px rgba(139, 92, 246, 0.3);
+  transform: translateY(-2px) scale(1.03);
+}
+.action-btn-primary:active:not(:disabled) {
+  transform: translateY(0px) scale(0.97);
+  box-shadow: 0 2px 10px rgba(139, 92, 246, 0.3);
+  transition-duration: 0.08s;
+}
+.action-btn-primary:focus-visible {
+  outline: 2px solid rgba(139, 92, 246, 0.7);
+  outline-offset: 3px;
+}
+.action-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .action-btn-ghost {
   background: rgba(255, 255, 255, 0.04);
   color: rgba(232, 232, 240, 0.7);
   border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.15s ease,
+              background 0.15s ease,
+              color 0.15s ease;
 }
-.action-btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.08);
+.action-btn-ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.09);
   color: #e8e8f0;
+  transform: translateY(-1px) scale(1.02);
+  box-shadow: 0 4px 16px rgba(255, 255, 255, 0.05);
+}
+.action-btn-ghost:active:not(:disabled) {
+  transform: translateY(0px) scale(0.97);
+  transition-duration: 0.08s;
+}
+.action-btn-ghost:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.25);
+  outline-offset: 3px;
+}
+.action-btn-ghost:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* ── Streak flame ─────────────────────────────────────── */
