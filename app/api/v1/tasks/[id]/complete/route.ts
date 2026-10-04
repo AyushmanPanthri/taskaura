@@ -10,8 +10,10 @@
 
 import { getAuthenticatedUser } from "@/lib/api/auth";
 import { apiError, apiSuccess, safeCatchError } from "@/lib/api/response";
+import { ANTI_FARMING_CONFIG } from "@/lib/logic/economy";
 import { taskRepository } from "@/lib/repositories/task-repository";
 import { buildCompletionGamification } from "@/lib/services/completion-gamification";
+import { NextResponse } from "next/server";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -107,7 +109,36 @@ export async function POST(req: Request, { params }: RouteParams) {
       return apiError("INVALID_TRANSITION", error.message, 400);
     }
     if (error?.message?.includes("Daily completion-attempt limit")) {
-      return apiError("RATE_LIMIT_EXCEEDED", error.message, 429);
+      const serverNow = new Date();
+      const nextServerDay = new Date(serverNow);
+      nextServerDay.setHours(24, 0, 0, 0);
+      const reason = "DAILY_COMPLETION_ATTEMPT_LIMIT";
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: "RATE_LIMIT_EXCEEDED",
+            message: error.message,
+          },
+          data: {
+            rejected: true,
+            reason,
+            gamification: {
+              feedback: {
+                type: "REJECTED",
+                reason,
+                what: "Today's completion-attempt quota is exhausted.",
+                why: `The server allows ${ANTI_FARMING_CONFIG.dailyCompletionAttemptsLimit} completion attempts per server day.`,
+                remainingMs: Math.max(
+                  0,
+                  nextServerDay.getTime() - serverNow.getTime()
+                ),
+              },
+            },
+          },
+        },
+        { status: 429 }
+      );
     }
     return safeCatchError(err);
   }

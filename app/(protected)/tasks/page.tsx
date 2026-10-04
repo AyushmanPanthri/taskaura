@@ -67,9 +67,16 @@ function RejectionBanner({
       >
         <div className="flex items-center gap-2">
           <span className="text-lg">⚠️</span>
-          <p className="text-xs text-amber-300 font-semibold">
-            Completion rejected: {info.reason}
-          </p>
+          <div>
+            <p className="text-xs text-amber-300 font-semibold">
+              Completion rejected: {info.reason}
+            </p>
+            {info.remainingMs !== undefined && info.remainingMs > 0 && (
+              <p className="text-[0.7rem] text-white/50 mt-0.5">
+                Try again in {formatRemainingMs(info.remainingMs)}.
+              </p>
+            )}
+          </div>
         </div>
         <button
           onClick={onDismiss}
@@ -190,7 +197,7 @@ export default function TasksPage() {
       });
       const json = await res.json();
 
-      if (!json.success) {
+      if (!json.success && !json.data?.rejected) {
         // Network / server error — no side effects
         return;
       }

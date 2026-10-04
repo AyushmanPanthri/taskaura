@@ -159,7 +159,7 @@ export default function DashboardPage() {
         headers: { "Content-Type": "application/json" },
       });
       const json = await res.json();
-      if (json.success && json.data) {
+      if ((json.success && json.data) || json.data?.rejected) {
         handleTaskCompletionResponse(json.data, {
           onConfirmed: (completedTask) => {
             setTasks((current) =>
@@ -188,11 +188,17 @@ export default function DashboardPage() {
               "REJECTED";
             const remainingMs =
               rejection.gamification?.feedback.remainingMs;
-            setCompletionNotice(
+            const remainingHours = remainingMs
+              ? Math.floor(remainingMs / 3_600_000)
+              : 0;
+            const remainingMinutes = remainingMs
+              ? Math.ceil((remainingMs % 3_600_000) / 60_000)
+              : 0;
+            const retryText =
               remainingMs && remainingMs > 0
-                ? `${reason}: ${Math.ceil(remainingMs / 60_000)}m remaining.`
-                : `Completion rejected: ${reason}`
-            );
+                ? ` Try again in ${remainingHours ? `${remainingHours}h ` : ""}${remainingMinutes}m.`
+                : "";
+            setCompletionNotice(`Completion rejected: ${reason}.${retryText}`);
           },
         });
       }
