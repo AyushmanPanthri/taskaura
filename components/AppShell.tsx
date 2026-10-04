@@ -497,9 +497,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </p>
             )}
             {gamificationToast.streak?.changed && (
-              <p className="text-xs text-orange-300">
+              <span className="badge badge-orange">
                 {gamificationToast.streak.current} day streak
-              </p>
+              </span>
             )}
             {gamificationToast.achievements?.map((achievement) => (
               <p key={achievement.id} className="text-xs text-amber-200">
@@ -507,9 +507,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </p>
             ))}
             {gamificationToast.ranking?.changed && (
-              <p className="text-xs text-cyan-200">
+              <span className="badge badge-cyan">
                 Rank up: #{gamificationToast.ranking.previousRank} to #{gamificationToast.ranking.newRank}
-              </p>
+              </span>
             )}
           </div>
         </div>
