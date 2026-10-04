@@ -7,7 +7,7 @@
 // ============================================================
 
 import React, { useState, useEffect, useCallback } from "react";
-import { triggerXpToast, triggerCelebration } from "@/components/AppShell";
+import { handleTaskCompletionResponse } from "@/components/task-completion-feedback";
 import { AiProposalCard } from "@/components/AiProposalCard";
 import { EmptyState, ErrorState } from "@/components/States";
 import type { Task, Difficulty } from "@/lib/logic/types";
@@ -21,11 +21,116 @@ const DIFF_BADGE: Record<string, { cls: string; label: string }> = {
 
 type TaskFilter = "ALL" | "ACTIVE" | "COMPLETED";
 
+/** Rejection metadata kept per task-id so the banner appears inline. */
+interface RejectionInfo {
+  reason: string;
+  minimumRequiredDurationMs?: number;
+  serverDurationMs?: number;
+  remainingMs?: number;
+}
+
+/** Human-readable remaining time in "Xm Ys" format. */
+function formatRemainingMs(remainingMs: number): string {
+  const totalSec = Math.ceil(remainingMs / 1000);
+  const minutes = Math.floor(totalSec / 60);
+  const seconds = totalSec % 60;
+  if (minutes === 0) return `${seconds}s`;
+  if (seconds === 0) return `${minutes}m`;
+  return `${minutes}m ${seconds}s`;
+}
+
+/** Human-readable minimum required time in "Xm" format. */
+function formatMinutes(ms: number): string {
+  const minutes = Math.round(ms / 60_000);
+  return `${minutes}m`;
+}
+
+/** Inline rejection banner displayed below a task row when the server rejects
+ *  a completion attempt. Dismissable by the user. */
+function RejectionBanner({
+  taskTitle,
+  info,
+  onDismiss,
+}: {
+  taskTitle: string;
+  info: RejectionInfo;
+  onDismiss: () => void;
+}) {
+  if (info.reason !== "TOO_FAST") {
+    // Generic fallback for any other future rejection reason
+    return (
+      <div
+        className="mx-4 mb-3 px-4 py-3 rounded-xl border border-amber-500/30 bg-amber-500/10 flex items-center justify-between gap-3 animate-fade-in-up"
+        role="alert"
+        aria-live="polite"
+        data-testid={`rejection-banner-${taskTitle}`}
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-lg">⚠️</span>
+          <p className="text-xs text-amber-300 font-semibold">
+            Completion rejected: {info.reason}
+          </p>
+        </div>
+        <button
+          onClick={onDismiss}
+          className="text-amber-400/60 hover:text-amber-300 text-xs transition-colors"
+          aria-label="Dismiss rejection notice"
+        >
+          ✕
+        </button>
+      </div>
+    );
+  }
+
+  const remainingMs =
+    info.remainingMs ??
+    (info.minimumRequiredDurationMs !== undefined &&
+    info.serverDurationMs !== undefined
+      ? Math.max(0, info.minimumRequiredDurationMs - info.serverDurationMs)
+      : undefined);
+
+  return (
+    <div
+      className="mx-4 mb-3 px-4 py-3 rounded-xl border border-rose-500/30 bg-rose-500/8 flex items-start justify-between gap-3 animate-fade-in-up"
+      role="alert"
+      aria-live="polite"
+      data-testid={`rejection-banner-${taskTitle}`}
+    >
+      <div className="flex items-start gap-2 min-w-0">
+        <span className="text-base mt-0.5 shrink-0">⏳</span>
+        <div className="min-w-0">
+          <p className="text-xs font-bold text-rose-300">Not yet — too fast!</p>
+          <p className="text-[0.7rem] text-white/50 mt-0.5">
+            {info.minimumRequiredDurationMs !== undefined && (
+              <>Minimum required: <span className="text-white/70 font-semibold">{formatMinutes(info.minimumRequiredDurationMs)}</span>.</>
+            )}{" "}
+            {remainingMs !== undefined && remainingMs > 0 ? (
+              <>About <span className="text-rose-300 font-semibold">{formatRemainingMs(remainingMs)}</span> remaining.</>
+            ) : null}
+          </p>
+        </div>
+      </div>
+      <button
+        onClick={onDismiss}
+        className="text-rose-400/60 hover:text-rose-300 text-xs transition-colors shrink-0 mt-0.5"
+        aria-label="Dismiss rejection notice"
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<TaskFilter>("ALL");
+
+  // Per-task rejection state keyed by task id
+  const [rejections, setRejections] = useState<Map<string, RejectionInfo>>(
+    new Map()
+  );
 
   // Inline creation form state
   const [showCreate, setShowCreate] = useState(false);
@@ -71,25 +176,61 @@ export default function TasksPage() {
   }, []);
 
   const handleComplete = async (taskId: string) => {
+    // Clear any existing rejection banner for this task before retrying
+    setRejections((prev) => {
+      const next = new Map(prev);
+      next.delete(taskId);
+      return next;
+    });
+
     try {
       const res = await fetch(`/api/v1/tasks/${taskId}/complete`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
       const json = await res.json();
-      if (json.success) {
-        if (json.data.xpAwarded > 0) {
-          triggerXpToast(json.data.xpAwarded, `Completed: ${json.data.task.title}`);
-        }
-        // TEMP: Always play a celebration video on every task completion
-        // for demo reliability.  Remove this unconditional trigger and
-        // restore the original xpAwarded / questId conditions once
-        // per-event video selection is implemented.
-        triggerCelebration("task-complete");
-        await fetchTasks();
+
+      if (!json.success) {
+        // Network / server error — no side effects
+        return;
       }
+
+      const outcome = handleTaskCompletionResponse(json.data, {
+        onRejected: (data) => {
+          setRejections((prev) => {
+            const next = new Map(prev);
+            next.set(taskId, {
+              reason: data.reason ?? "REJECTED",
+              minimumRequiredDurationMs: data.minimumRequiredDurationMs,
+              serverDurationMs: data.serverDurationMs,
+              remainingMs: data.gamification?.feedback.remainingMs,
+            });
+            return next;
+          });
+        },
+        onConfirmed: (completedTask) => {
+          setTasks((previous) =>
+            previous.map((task) =>
+              task.id === taskId ? { ...task, ...completedTask } : task
+            )
+          );
+        },
+      });
+
+      if (outcome === "rejected") {
+        // Refresh task list to sync updated completionAttempts
+        await fetchTasks();
+        return;
+      }
+
+      if (outcome === "duplicate") {
+        await fetchTasks();
+        return;
+      }
+
+      await fetchTasks();
     } catch {
-      // Complete failed
+      // Network failure — silent, let the user retry
     }
   };
 
@@ -145,7 +286,7 @@ export default function TasksPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Tasks & Quests</h1>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Tasks &amp; Quests</h1>
           <p className="text-xs text-white/40 mt-1">
             Complete tasks to gain authoritative XP and level up
           </p>
@@ -268,78 +409,97 @@ export default function TasksPage() {
             const isCompleted = task.status === "COMPLETED";
             const isCancelled = task.status === "CANCELLED";
             const isTerminal = isCompleted || isCancelled;
+            const rejection = rejections.get(task.id);
 
             return (
-              <div
-                key={task.id}
-                className={`flex items-center gap-4 p-4 transition-colors ${
-                  isTerminal ? "opacity-50" : "hover:bg-white/[0.02]"
-                }`}
-              >
-                {/* Checkbox button */}
-                <button
-                  className={`task-check ${isCompleted ? "completed" : ""}`}
-                  onClick={() => !isTerminal && handleComplete(task.id)}
-                  disabled={isTerminal}
-                  aria-label={`Complete: ${task.title}`}
+              <React.Fragment key={task.id}>
+                <div
+                  className={`flex items-center gap-4 p-4 transition-colors ${
+                    isTerminal ? "opacity-50" : "hover:bg-white/[0.02]"
+                  }`}
                 >
-                  {isCompleted && <span className="text-white text-xs">✓</span>}
-                </button>
-
-                {/* Details */}
-                <div className="flex-1 min-w-0">
-                  <p
-                    className={`font-semibold text-sm ${
-                      isCompleted ? "line-through text-white/40" : "text-white/95"
-                    }`}
+                  {/* Checkbox button */}
+                  <button
+                    className={`task-check ${isCompleted ? "completed" : ""}`}
+                    onClick={() => !isTerminal && handleComplete(task.id)}
+                    disabled={isTerminal}
+                    aria-label={`Complete: ${task.title}`}
+                    id={`task-check-${task.id}`}
                   >
-                    {task.title}
-                  </p>
-                  {task.description && (
-                    <p className="text-xs text-white/40 mt-0.5 truncate">{task.description}</p>
-                  )}
-                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                    <span className={`badge ${DIFF_BADGE[task.difficulty]?.cls ?? "badge-cyan"}`}>
-                      {DIFF_BADGE[task.difficulty]?.label ?? task.difficulty}
-                    </span>
-                    {task.source === "AI" && (
-                      <span className="badge badge-purple">🤖 AI Quest</span>
+                    {isCompleted && <span className="text-white text-xs">✓</span>}
+                  </button>
+
+                  {/* Details */}
+                  <div className="flex-1 min-w-0">
+                    <p
+                      className={`font-semibold text-sm ${
+                        isCompleted ? "line-through text-white/40" : "text-white/95"
+                      }`}
+                    >
+                      {task.title}
+                    </p>
+                    {task.description && (
+                      <p className="text-xs text-white/40 mt-0.5 truncate">{task.description}</p>
                     )}
-                    {task.estimatedMinutes && (
-                      <span className="text-[0.7rem] text-white/30">
-                        ⏱️ {task.estimatedMinutes}m
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      <span className={`badge ${DIFF_BADGE[task.difficulty]?.cls ?? "badge-cyan"}`}>
+                        {DIFF_BADGE[task.difficulty]?.label ?? task.difficulty}
                       </span>
+                      {task.source === "AI" && (
+                        <span className="badge badge-purple">🤖 AI Quest</span>
+                      )}
+                      {task.estimatedMinutes && (
+                        <span className="text-[0.7rem] text-white/30">
+                          ⏱️ {task.estimatedMinutes}m
+                        </span>
+                      )}
+                      <span className="text-[0.7rem] text-white/20 capitalize">
+                        {task.status.toLowerCase().replace("_", " ")}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-2">
+                    {!isTerminal && (
+                      <button
+                        onClick={() => handleCancel(task.id)}
+                        className="text-xs text-white/30 hover:text-rose-400 p-1 transition-colors"
+                        title="Cancel Task"
+                      >
+                        ✕
+                      </button>
                     )}
-                    <span className="text-[0.7rem] text-white/20 capitalize">
-                      {task.status.toLowerCase().replace("_", " ")}
-                    </span>
+                    <button
+                      onClick={() => !isTerminal && handleComplete(task.id)}
+                      disabled={isTerminal}
+                      className={`action-btn text-xs py-1.5 px-3 ${
+                        isCompleted
+                          ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                          : "action-btn-primary"
+                      }`}
+                      id={`task-complete-btn-${task.id}`}
+                    >
+                      {isCompleted ? "Done" : "Complete"}
+                    </button>
                   </div>
                 </div>
 
-                {/* Actions */}
-                <div className="flex items-center gap-2">
-                  {!isTerminal && (
-                    <button
-                      onClick={() => handleCancel(task.id)}
-                      className="text-xs text-white/30 hover:text-rose-400 p-1 transition-colors"
-                      title="Cancel Task"
-                    >
-                      ✕
-                    </button>
-                  )}
-                  <button
-                    onClick={() => !isTerminal && handleComplete(task.id)}
-                    disabled={isTerminal}
-                    className={`action-btn text-xs py-1.5 px-3 ${
-                      isCompleted
-                        ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                        : "action-btn-primary"
-                    }`}
-                  >
-                    {isCompleted ? "Done" : "Complete"}
-                  </button>
-                </div>
-              </div>
+                {/* Rejection banner — rendered immediately below the task row */}
+                {rejection && (
+                  <RejectionBanner
+                    taskTitle={task.title}
+                    info={rejection}
+                    onDismiss={() =>
+                      setRejections((prev) => {
+                        const next = new Map(prev);
+                        next.delete(task.id);
+                        return next;
+                      })
+                    }
+                  />
+                )}
+              </React.Fragment>
             );
           })}
         </div>

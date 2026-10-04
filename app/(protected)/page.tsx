@@ -10,6 +10,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Ring } from "@/components/Ring";
 import { triggerXpToast } from "@/components/AppShell";
+import { handleTaskCompletionResponse } from "@/components/task-completion-feedback";
 import { AiProposalCard } from "@/components/AiProposalCard";
 import { ErrorState } from "@/components/States";
 import type { ProgressSummary } from "@/lib/services/progress-service";
@@ -91,10 +92,17 @@ export default function DashboardPage() {
         headers: { "Content-Type": "application/json" },
       });
       const json = await res.json();
-      if (json.success) {
-        if (json.data.xpAwarded > 0) {
-          triggerXpToast(json.data.xpAwarded, `Completed: ${json.data.task.title}`);
-        }
+      if (json.success && json.data) {
+        handleTaskCompletionResponse(json.data, {
+          onConfirmed: (completedTask) =>
+            setTasks((current) =>
+              current.map((task) =>
+                task.id === completedTask.id
+                  ? { ...task, ...completedTask }
+                  : task
+              )
+            ),
+        });
         await fetchDashboardData();
       }
     } catch {
