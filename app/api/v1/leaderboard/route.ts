@@ -83,15 +83,23 @@ export async function GET(req: Request) {
       const weeklyXp = row._sum.amount ?? 0;
       const rawName = userMap.get(row.userId) ?? "Productivity Hero";
 
-      // Anonymize other users' names (privacy): "Firstname L."
+      // Anonymize other users' names (privacy) using letters only.
+      // Strip punctuation/digits/underscores before applying the public format so
+      // private display-name characters cannot leak through the anonymized value.
       let displayName = rawName;
       if (!isSelf) {
-        const parts = rawName.split(" ");
-        if (parts.length > 1) {
-          displayName = parts[0] + ' ' + parts[1][0] + '.';
+        const sanitizedParts = rawName
+          .trim()
+          .split(/\\s+/)
+          .map((part) => part.replace(/[^A-Za-z]/g, ""))
+          .filter(Boolean);
+
+        const firstName = sanitizedParts[0] ?? "Player";
+        if (sanitizedParts.length > 1) {
+          displayName = firstName + " " + sanitizedParts[1][0].toUpperCase() + ".";
         } else {
-          // Single-word name: use first 6 chars + dot to stay anonymized
-          displayName = parts[0].slice(0, 6) + '.';
+          // Single-word name: use first 6 ASCII letters + dot to stay anonymized.
+          displayName = firstName.slice(0, 6) + ".";
         }
       }
 

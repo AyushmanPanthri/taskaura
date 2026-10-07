@@ -336,7 +336,21 @@ export class TaskRepository {
         serverNow.getDate()
       );
 
-      // 1. Lock and load task from PostgreSQL
+      // 1. Lock the task row for the whole transaction before reading completion state.
+      // Without this row lock, concurrent requests can all observe IN_PROGRESS before the
+      // first request commits, creating a TOCTOU race around the XP payout.
+      const lockedTaskRows = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id"
+        FROM "Task"
+        WHERE "id" = CAST(${taskId} AS UUID)
+          AND "userId" = CAST(${userId} AS UUID)
+        FOR UPDATE
+      `;
+
+      if (lockedTaskRows.length === 0) {
+        throw new Error("Task not found");
+      }
+
       const taskRow = await tx.task.findFirst({
         where: { id: taskId, userId },
       });
