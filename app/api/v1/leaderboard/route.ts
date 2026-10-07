@@ -90,7 +90,7 @@ export async function GET(req: Request) {
       if (!isSelf) {
         const sanitizedParts = rawName
           .trim()
-          .split(/\\s+/)
+          .split(/\s+/)
           .map((part) => part.replace(/[^A-Za-z]/g, ""))
           .filter(Boolean);
 
