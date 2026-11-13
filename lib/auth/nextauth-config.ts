@@ -9,9 +9,15 @@ import { googleAuthService } from "./google-auth-service";
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID || "";
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET || "";
+const authSecret = process.env.AUTH_SECRET;
+
+if (process.env.NODE_ENV === "production" && !authSecret) {
+  throw new Error("AUTH_SECRET must be set in production.");
+}
 
 export const authOptions: NextAuthOptions = {
-  secret: process.env.AUTH_SECRET || "taskaura-production-super-secret-key-32-chars-long",
+  // Never ship a predictable, source-controlled authentication secret.
+  secret: authSecret,
   providers: [
     ...(googleClientId && googleClientSecret
       ? [
